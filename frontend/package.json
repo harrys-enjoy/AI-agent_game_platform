@@ -1,0 +1,9 @@
+{
+  "name": "main-ai-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {"dev": "vite", "build": "tsc -b && vite build", "test:preview": "node --experimental-strip-types scripts/preview-utils-test.mjs", "test:menu": "node --experimental-strip-types scripts/menu-utils-test.mjs", "test:task": "node --experimental-strip-types scripts/task-utils-test.mjs", "test:command": "node --experimental-strip-types scripts/command-utils-test.mjs"},
+  "dependencies": {"@vitejs/plugin-react": "latest", "vite": "latest", "typescript": "latest", "react": "latest", "react-dom": "latest"},
+  "devDependencies": {"@types/react": "latest", "@types/react-dom": "latest"}
+}

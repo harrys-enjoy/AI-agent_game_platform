@@ -1,0 +1,47 @@
+services:
+  main-agent:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      LIVE_AGENT_DISCOVERY: "true"
+    depends_on:
+      - workmate-agent
+      - video-agent
+      - dev-agent
+      - game-qa-agent
+
+  workmate-agent:
+    build: ./mock-agents
+    expose: ["8001"]
+    environment:
+      AGENT_NAME: workmate-agent
+      AGENT_PORT: "8001"
+      CARD_FILE: /app/cards/workmate-agent.json
+
+  video-agent:
+    build: ./mock-agents
+    expose: ["8002"]
+    environment:
+      AGENT_NAME: video-agent
+      AGENT_PORT: "8002"
+      CARD_FILE: /app/cards/video-agent.json
+
+  dev-agent:
+    build: ./mock-agents
+    expose: ["8003"]
+    environment:
+      AGENT_NAME: dev-agent
+      AGENT_PORT: "8003"
+      CARD_FILE: /app/cards/dev-agent.json
+
+  game-qa-agent:
+    build: "../Catalog & Manual(Game project)"
+    expose: ["3000"]
+    environment:
+      PORT: "3000"
+      AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
+
+networks:
+  default:
+    name: workmate-network
