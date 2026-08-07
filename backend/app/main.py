@@ -30,7 +30,7 @@ app.add_middleware(
 )
 store = TaskStore("main_agent.db")
 conversation_store = ConversationStore("main_agent.db")
-registry = AgentRegistry(timeout=0.25)
+registry: AgentRegistry
 
 
 class TaskRequest(BaseModel):
@@ -54,7 +54,7 @@ class StoryCreateRequest(BaseModel):
 
 
 class LocalClient:
-    async def send_message(self, agent_url: str, request: dict) -> dict:
+    async def send_message(self, agent_url: str, request: dict, headers: dict[str, str] | None = None) -> dict:
         return {"agent": agent_url, "summary": request["message"], "status": "succeeded"}
 
 
@@ -137,9 +137,7 @@ def build_agent_request(agent_name: str, message: str, mode: str | None = None) 
     return request
 
 
-for card in cards:
-    base_url = card.url.rsplit("/message:send", 1)[0].removesuffix("/a2a")
-    registry.register(card.name, base_url)
+registry = AgentRegistry.from_environment(os.environ)
 
 
 @app.get("/health")
@@ -192,7 +190,7 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if card_name == "game-qna-agent":
         request["mode"] = command["mode"] if command else "lore"
     try:
-        result = await client.send_message(card.url, request)
+        result = await client.send_message(card.url, request, headers=registry.headers(card_name))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     answer = result.get("answer") or result.get("summary") or "응답을 받지 못했습니다."
@@ -241,7 +239,7 @@ async def create_task(payload: TaskRequest, background_tasks: BackgroundTasks) -
                     payload.request,
                     "lore" if card.name == "game-qna-agent" else None,
                 )
-                results.append(await orchestrator.client.send_message(card.url, request))
+                results.append(await orchestrator.client.send_message(card.url, request, headers=registry.headers(card.name)))
             store.update(task.task_id, status="succeeded", result={"results": results})
         except Exception as exc:
             store.update(task.task_id, status="failed", result={"results": results}, error=str(exc))
@@ -278,7 +276,7 @@ async def retry_task(task_id: str, background_tasks: BackgroundTasks) -> dict[st
     async def rerun() -> None:
         results = []
         for card in selected:
-            results.append(await LocalClient().send_message(card.url, build_agent_request(card.name, task.request)))
+            results.append(await LocalClient().send_message(card.url, build_agent_request(card.name, task.request), headers=registry.headers(card.name)))
         store.update(task_id, status="succeeded", result={"results": results})
 
     background_tasks.add_task(rerun)

@@ -13,6 +13,14 @@ class AgentCapabilities(BaseModel):
     streaming: bool = False
 
 
+class AgentInterface(BaseModel):
+    url: str
+    protocol_binding: str = Field(alias="protocolBinding")
+    protocol_version: str = Field(alias="protocolVersion")
+
+    model_config = {"populate_by_name": True}
+
+
 class AgentCard(BaseModel):
     name: str
     description: str
@@ -20,6 +28,10 @@ class AgentCard(BaseModel):
     skills: list[AgentSkill] = Field(default_factory=list)
     capabilities: AgentCapabilities = Field(default_factory=AgentCapabilities)
     streaming: bool = False
+    supported_interfaces: list[AgentInterface] = Field(default_factory=list, alias="supportedInterfaces")
+    security_schemes: dict[str, dict] = Field(default_factory=dict, alias="securitySchemes")
+
+    model_config = {"populate_by_name": True}
 
 
 class TaskStatus(StrEnum):

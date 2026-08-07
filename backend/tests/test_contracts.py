@@ -19,3 +19,22 @@ def test_agent_card_preserves_declared_skills():
 def test_task_rejects_unknown_status():
     with pytest.raises(ValidationError):
         TaskRecord(task_id="t1", request="x", selected_agents=[], status="unknown")
+
+
+def test_agent_card_preserves_http_json_interface_and_security_scheme():
+    card = AgentCard.model_validate({
+        "name": "game-qna-agent",
+        "description": "Game Q&A",
+        "url": "https://game.example/message:send",
+        "supportedInterfaces": [{
+            "url": "https://game.example/message:send",
+            "protocolBinding": "HTTP+JSON",
+            "protocolVersion": "1.0",
+        }],
+        "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}},
+        "skills": [],
+    })
+
+    assert card.supported_interfaces[0].protocol_binding == "HTTP+JSON"
+    assert card.supported_interfaces[0].protocol_version == "1.0"
+    assert card.security_schemes["bearerAuth"]["scheme"] == "bearer"
