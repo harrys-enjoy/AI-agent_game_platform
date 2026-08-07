@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from .contracts import AgentCard, TaskEvent
 from .conversation_store import ConversationStore
 from .a2a_client import A2AClient
+from .errors import A2AError
 from .main_agent_prompt import get_agent_system_prompt
 from .orchestrator import Orchestrator
 from .registry import AgentRegistry
@@ -191,6 +192,8 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
         request["mode"] = command["mode"] if command else "lore"
     try:
         result = await client.send_message(card.url, request, headers=registry.headers(card_name))
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     answer = result.get("answer") or result.get("summary") or "응답을 받지 못했습니다."
@@ -241,6 +244,11 @@ async def create_task(payload: TaskRequest, background_tasks: BackgroundTasks) -
                 )
                 results.append(await orchestrator.client.send_message(card.url, request, headers=registry.headers(card.name)))
             store.update(task.task_id, status="succeeded", result={"results": results})
+        except A2AError as exc:
+            error = f"{exc.status}: {exc.message}"
+            if exc.request_id:
+                error += f" (request_id={exc.request_id})"
+            store.update(task.task_id, status="failed", result={"results": results}, error=error)
         except Exception as exc:
             store.update(task.task_id, status="failed", result={"results": results}, error=str(exc))
 
