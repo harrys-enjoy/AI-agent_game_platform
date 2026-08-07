@@ -62,13 +62,25 @@ class A2AClient:
         request: dict[str, Any],
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        is_http_json = agent_url.rstrip("/").endswith("/message:send")
+        agent_url = agent_url.rstrip("/")
+        if agent_url.endswith("/a2a"):
+            agent_url += "/message:send"
+        is_http_json = agent_url.endswith("/message:send")
         if is_http_json:
+            parts = [{"text": request.get("message", "")}]
+            if request.get("skill_id"):
+                parts = [{
+                    "data": {
+                        "skill_id": request["skill_id"],
+                        "message": request.get("message", ""),
+                    },
+                    "mediaType": "application/json",
+                }]
             payload = {
                 "message": {
                     "messageId": request.get("request_id", "main-agent"),
                     "role": "ROLE_USER",
-                    "parts": [{"text": request.get("message", "")}],
+                    "parts": parts,
                     **({"contextId": request["context_id"]} if request.get("context_id") else {}),
                 },
                 "metadata": {
@@ -85,7 +97,7 @@ class A2AClient:
             response = await client.post(
                 agent_url,
                 json=payload,
-                headers={"content-type": "application/a2a+json", **(headers or {})} if is_http_json else headers,
+                headers={"content-type": "application/a2a+json", "A2A-Version": "1.0", **(headers or {})} if is_http_json else headers,
             )
             if response.is_error:
                 try:

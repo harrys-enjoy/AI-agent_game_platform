@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -40,3 +42,27 @@ async def test_send_message_supports_http_json_agent_card_endpoint():
 
     assert result["status"] == "succeeded"
     assert result["answer"] == "게임 답변"
+
+
+@pytest.mark.asyncio
+async def test_send_message_builds_workmate_http_json_envelope():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/a2a/message:send"
+        assert request.headers["A2A-Version"] == "1.0"
+        assert request.headers["Authorization"] == "Bearer workmate-token"
+        payload = json.loads(request.content)
+        assert payload["message"]["parts"][0]["data"] == {
+            "skill_id": "daily_briefing",
+            "message": "오늘 업무",
+        }
+        return httpx.Response(200, json={"message": {"parts": [{"text": "완료"}]}})
+
+    client = A2AClient(transport=httpx.MockTransport(handler))
+    result = await client.send_message(
+        "http://workmate-agent:8001/a2a",
+        {"message": "오늘 업무", "skill_id": "daily_briefing"},
+        headers={"Authorization": "Bearer workmate-token"},
+    )
+
+    assert result["status"] == "succeeded"
+    assert result["answer"] == "완료"

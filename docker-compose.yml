@@ -10,23 +10,32 @@ services:
       VIDEO_AGENT_URL: "http://video-agent:8002"
       DEV_AGENT_URL: "http://dev-agent:8003"
       GAME_QNA_AGENT_URL: "http://game-qa-agent:3000"
-      WORKMATE_AGENT_TOKEN: "${WORKMATE_AGENT_TOKEN:-}"
+      WORKMATE_AGENT_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
       VIDEO_AGENT_TOKEN: "${VIDEO_AGENT_TOKEN:-}"
       DEV_AGENT_TOKEN: "${DEV_AGENT_TOKEN:-}"
       GAME_QNA_AGENT_TOKEN: "${GAME_QNA_AGENT_TOKEN:-}"
     depends_on:
-      - workmate-agent
-      - video-agent
-      - dev-agent
-      - game-qa-agent
+      workmate-agent:
+        condition: service_healthy
+      video-agent:
+        condition: service_started
+      dev-agent:
+        condition: service_started
+      game-qa-agent:
+        condition: service_started
 
   workmate-agent:
-    build: ./mock-agents
+    build: ../workmate-agent-main
     expose: ["8001"]
     environment:
-      AGENT_NAME: workmate-agent
-      AGENT_PORT: "8001"
-      CARD_FILE: /app/cards/workmate-agent.json
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      APP_BASE_URL: "http://workmate-agent:8001/a2a"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   video-agent:
     build: ./mock-agents

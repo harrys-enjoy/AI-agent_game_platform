@@ -134,6 +134,8 @@ def build_agent_request(agent_name: str, message: str, mode: str | None = None) 
         "locale": "ko",
         "system_prompt": get_agent_system_prompt(agent_name),
     }
+    if agent_name == "workmate-agent":
+        request["skill_id"] = "daily_briefing"
     if mode is not None:
         request["mode"] = mode
     return request
