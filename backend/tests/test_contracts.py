@@ -38,3 +38,18 @@ def test_agent_card_preserves_http_json_interface_and_security_scheme():
     assert card.supported_interfaces[0].protocol_binding == "HTTP+JSON"
     assert card.supported_interfaces[0].protocol_version == "1.0"
     assert card.security_schemes["bearerAuth"]["scheme"] == "bearer"
+from app.contracts import AgentCard
+
+
+def test_agent_card_accepts_interface_only_url():
+    card = AgentCard.model_validate({
+        "name": "Workmate AI",
+        "description": "Workmate agent",
+        "supportedInterfaces": [{
+            "url": "http://workmate-agent:8001/a2a",
+            "protocolBinding": "HTTP+JSON",
+            "protocolVersion": "1.0",
+        }],
+    })
+
+    assert card.supported_interfaces[0].url.endswith("/a2a")

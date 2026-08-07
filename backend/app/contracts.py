@@ -24,7 +24,7 @@ class AgentInterface(BaseModel):
 class AgentCard(BaseModel):
     name: str
     description: str
-    url: str
+    url: str | None = None
     skills: list[AgentSkill] = Field(default_factory=list)
     capabilities: AgentCapabilities = Field(default_factory=AgentCapabilities)
     streaming: bool = False
