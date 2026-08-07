@@ -52,6 +52,19 @@ def test_frontend_origin_can_call_api():
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+def test_vite_localhost_ip_origin_can_call_api():
+    response = TestClient(app).options(
+        "/api/tasks",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
 def test_vite_preview_origin_can_call_api():
     response = TestClient(app).options(
         "/api/tasks",

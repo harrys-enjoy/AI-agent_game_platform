@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $workspaceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectsRoot = Split-Path -Parent $workspaceRoot
 $catalogRoot = Join-Path $projectsRoot 'Catalog & Manual(Game project)'
+$backendRoot = Join-Path $workspaceRoot 'backend'
 $frontendRoot = Join-Path $workspaceRoot 'frontend'
 
 function Test-Port($port) {
@@ -12,6 +13,12 @@ if (-not (Test-Port 3010)) {
   $env:PORT = '3010'
   $env:AGENT_PUBLIC_URL = 'http://127.0.0.1:3010'
   Start-Process -FilePath 'node.exe' -ArgumentList 'src/server.js' -WorkingDirectory $catalogRoot -WindowStyle Hidden | Out-Null
+}
+
+if (-not (Test-Port 8000)) {
+  $env:LIVE_AGENT_DISCOVERY = 'true'
+  $env:GAME_QA_AGENT_URL = 'http://127.0.0.1:3010/message:send'
+  Start-Process -FilePath 'C:\Anaconda3\python.exe' -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000' -WorkingDirectory $backendRoot -WindowStyle Hidden | Out-Null
 }
 
 if (-not (Test-Port 5173)) {
