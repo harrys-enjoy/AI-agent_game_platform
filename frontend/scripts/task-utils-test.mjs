@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTask, updateTask, createTaskProposal, isTaskRequest, getTaskAction, createChatReply, shouldApplyChatResponse } from "../src/task-utils.ts";
+import { createTask, updateTask, createTaskProposal, isTaskRequest, getTaskAction, createChatReply, shouldApplyChatResponse, mapTaskStatus, pollTask } from "../src/task-utils.ts";
 
 test("creates a ready task from a non-empty task name", () => {
   assert.deepEqual(createTask("Review combat balance", "Development Assistant", "task-4"), {
@@ -56,4 +56,27 @@ test("returns a visible reply for a normal chat message", () => {
 test("does not apply a delayed response to a different selected chat", () => {
   assert.equal(shouldApplyChatResponse("Game Q&A", "Workmate AI"), false);
   assert.equal(shouldApplyChatResponse("Game Q&A", "Game Q&A"), true);
+});
+
+test("maps backend task statuses to viewer labels", () => {
+  assert.equal(mapTaskStatus("queued"), "Ready to start");
+  assert.equal(mapTaskStatus("running"), "In Progress");
+  assert.equal(mapTaskStatus("succeeded"), "Done");
+  assert.equal(mapTaskStatus("failed"), "Stuck");
+  assert.equal(mapTaskStatus("cancelled"), "Waiting for review");
+});
+
+test("polls a task until it reaches a terminal backend status", async () => {
+  const responses = [
+    { status: "running" },
+    { status: "succeeded", result: { results: [{ answer: "done" }] } },
+  ];
+  let calls = 0;
+  const fetchImpl = async () => ({ ok: true, json: async () => responses[calls++] });
+
+  const result = await pollTask("task-1", fetchImpl, 0, 3);
+
+  assert.equal(calls, 2);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.result.results[0].answer, "done");
 });

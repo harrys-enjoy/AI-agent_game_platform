@@ -1,4 +1,5 @@
 export type CreatedTask = { id: string; name: string; owner: string; status: string; agent: string };
+export type BackendTask = { status: string; result?: unknown; error?: string | null };
 
 export function createTask(name: string, agent: string, id: string): CreatedTask | null {
   const trimmedName = name.trim();
@@ -24,6 +25,32 @@ export function createChatReply(request: string): string {
 
 export function shouldApplyChatResponse(selectedChat: string, responseChat: string): boolean {
   return selectedChat === responseChat;
+}
+
+export function mapTaskStatus(status: string): string {
+  return ({
+    queued: "Ready to start",
+    running: "In Progress",
+    succeeded: "Done",
+    failed: "Stuck",
+    cancelled: "Waiting for review",
+  } as Record<string, string>)[status] ?? "Waiting for review";
+}
+
+export async function pollTask(
+  taskId: string,
+  fetchImpl: typeof fetch = fetch,
+  intervalMs = 1000,
+  maxAttempts = 30,
+): Promise<BackendTask> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetchImpl(`/api/tasks/${encodeURIComponent(taskId)}`);
+    if (!response.ok) throw new Error(`Task polling failed (${response.status})`);
+    const task = await response.json() as BackendTask;
+    if (["succeeded", "failed", "cancelled"].includes(task.status)) return task;
+    if (attempt < maxAttempts - 1) await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Task polling timed out");
 }
 
 export function createTaskProposal(request: string, id: string): CreatedTask | null {

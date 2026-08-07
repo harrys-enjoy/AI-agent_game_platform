@@ -26,6 +26,10 @@ Main Agent는 Agent Card를 조회한 뒤 `supportedInterfaces`의 HTTP+JSON 엔
 }
 ```
 
+MAIN은 Card의 `supportedInterfaces`에서 `protocolBinding: "HTTP+JSON"`, `protocolVersion: "1.0"` 항목을 선택합니다. `GAME_QNA_AGENT_TOKEN`이 설정된 경우 호출에 `Authorization: Bearer <token>`을 추가하며 token은 서버 환경변수에만 둡니다.
+
+Catalog가 완료 Task를 반환하는 경우 MAIN은 Task URL을 polling하고 `message.parts`, `task.status.message.parts`, `task.artifacts` 순서로 답변 텍스트를 읽습니다. 오류는 Catalog의 `application/a2a+json` 오류 계약을 유지한 채 Main API 상태 코드로 매핑합니다.
+
 ## 실행
 
 Main Agent 폴더에서 다음 명령을 실행합니다.

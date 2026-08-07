@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import PreviewPanel from "./PreviewPanel";
 import "./chat-answer.css";
 import { selectMenu } from "./menu-utils";
-import { createChatReply, createTask, createTaskProposal, getTaskAction, shouldApplyChatResponse, updateTask } from "./task-utils";
+import { createChatReply, createTask, createTaskProposal, getTaskAction, mapTaskStatus, pollTask, shouldApplyChatResponse, updateTask } from "./task-utils";
 import "./task-form.css";
 import { commandCatalog, resolveChatCommand } from "./command-utils";
 import { scrollChatToBottom } from "./chat-scroll";
@@ -98,10 +98,17 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request: proposalMessage.proposal.name }) });
       if (!response.ok) throw new Error("Task API failed");
-      const data = await response.json();
-      setTasks((items) => [...items, { ...proposalMessage.proposal, id: data.task_id }]);
+      const data = await response.json() as { task_id: string; status?: string };
+      const taskId = data.task_id;
+      setTasks((items) => [...items, { ...proposalMessage.proposal, id: taskId, status: mapTaskStatus(data.status ?? "queued") }]);
       setChat((items) => items.map((item) => item.id === proposalId && item.kind === "proposal" ? { ...item, state: "added" } : item));
       persistMessage("assistant", `Task added to Project Task: ${proposalMessage.proposal.name}`);
+      try {
+        const task = await pollTask(taskId, (path) => fetch(`${API_BASE_URL}${path}`));
+        setTasks((items) => items.map((item) => item.id === taskId ? { ...item, status: mapTaskStatus(task.status) } : item));
+      } catch {
+        setTasks((items) => items.map((item) => item.id === taskId ? { ...item, status: "Stuck" } : item));
+      }
     } catch { setChat((items) => items.map((item) => item.id === proposalId && item.kind === "proposal" ? { ...item, state: "error" } : item)); persistMessage("assistant", "Task could not be added. Check the API connection."); }
   }
 

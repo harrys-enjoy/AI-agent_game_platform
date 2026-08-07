@@ -27,3 +27,13 @@ main-agent/
 ├── dev-agent/        # 개발 Agent 브랜치 체크아웃 위치
 └── game-qa-agent/    # 게임 Q&A Agent 브랜치 체크아웃 위치
 ```
+
+## A2A 1.0 연동 설정
+
+`.env.example`을 복사해 Agent registry와 서버 간 token을 설정합니다. `AGENT_REGISTRY`는 쉼표로 구분한 Agent 이름 목록이며, 각 Agent는 `<이름>_AGENT_URL`과 선택적인 `<이름>_AGENT_TOKEN`을 사용합니다.
+
+Main Agent는 `GET /.well-known/agent-card.json`을 조회한 뒤 `supportedInterfaces`의 `protocolBinding=HTTP+JSON`, `protocolVersion=1.0` endpoint를 선택합니다. 호출에는 `application/a2a+json`을 사용하며 token이 설정된 경우에만 `Authorization: Bearer ...`를 서버에서 추가합니다.
+
+Task API는 `POST /api/tasks`로 작업을 만들고 `GET /api/tasks/{task_id}`에서 `queued`, `running`, `succeeded`, `failed`, `cancelled` 상태를 조회합니다. 프론트엔드는 terminal 상태까지 polling합니다.
+
+Catalog의 `/message:send` 오류는 `error.code`, `error.status`, `error.message`, `error.requestId`를 보존합니다. 입력 오류는 400, 인증 오류는 401, 미발견은 404, 일시적 장애는 503, 내부 오류는 502로 Main API에 매핑됩니다.
