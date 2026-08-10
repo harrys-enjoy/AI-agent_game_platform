@@ -25,6 +25,7 @@ if (-not (Test-Port 8001)) {
 
 if (-not (Test-Port 8000)) {
   $env:LIVE_AGENT_DISCOVERY = 'true'
+  $env:AGENT_REGISTRY = 'workmate-agent,game-qna-agent'
   $env:GAME_QA_AGENT_URL = 'http://127.0.0.1:3010/message:send'
   $env:WORKMATE_AGENT_URL = 'http://127.0.0.1:8001'
   $env:WORKMATE_AGENT_TOKEN = $workmateToken
