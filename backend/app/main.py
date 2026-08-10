@@ -5,7 +5,7 @@ from typing import Literal
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .contracts import AgentCard, TaskEvent
 from .conversation_store import ConversationStore
@@ -53,6 +53,16 @@ class StoryCreateRequest(BaseModel):
     name: str
     keywords: list[str]
     answer: str
+
+
+class StoryDraftRequest(StoryCreateRequest):
+    relatedLoreIds: list[str] = Field(default_factory=list)
+    relatedCodexIds: list[str] = Field(default_factory=list)
+
+
+class StoryApproveRequest(BaseModel):
+    reviewId: str
+    draft: StoryDraftRequest
 
 
 class LocalClient:
@@ -213,17 +223,29 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     }
 
 
-@app.post("/api/stories", status_code=201)
-async def create_story(payload: StoryCreateRequest) -> dict:
+def catalog_base_url() -> str:
     catalog_url = os.getenv("GAME_QNA_AGENT_URL", os.getenv("GAME_QA_AGENT_URL", "http://game-qa-agent:3000/message:send"))
-    base_url = catalog_url.rsplit("/message:send", 1)[0].removesuffix("/a2a")
+    return catalog_url.rsplit("/message:send", 1)[0].removesuffix("/a2a").rstrip("/")
+
+
+async def post_catalog(path: str, payload: dict) -> dict:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.post(f"{base_url}/knowledge/lore", json=payload.model_dump())
+            response = await client.post(f"{catalog_base_url()}{path}", json=payload)
             response.raise_for_status()
             return response.json()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Catalog story API unavailable: {exc}") from exc
+
+
+@app.post("/api/stories/review")
+async def review_story(payload: StoryDraftRequest) -> dict:
+    return await post_catalog("/api/story-review", payload.model_dump())
+
+
+@app.post("/api/stories/approve", status_code=201)
+async def approve_story(payload: StoryApproveRequest) -> dict:
+    return await post_catalog("/api/story-approve", payload.model_dump())
 
 
 @app.post("/api/tasks", status_code=202)

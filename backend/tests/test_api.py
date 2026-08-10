@@ -131,3 +131,61 @@ def test_main_chat_routes_lore_question_to_game_qna_agent():
     assert response.status_code == 200
     assert response.json()["agent"] == "game-qna-agent"
 
+
+def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"reviewId": "review-main", "verdict": "review_required", "approvalRequired": True}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json):
+            assert url.endswith("/api/story-review")
+            assert json["name"] == "새 이야기"
+            return FakeResponse()
+
+    monkeypatch.setattr("app.main.httpx.AsyncClient", lambda timeout: FakeClient())
+    response = TestClient(app).post(
+        "/api/stories/review",
+        json={"name": "새 이야기", "keywords": ["새 이야기"], "answer": "본문"},
+    )
+    assert response.status_code == 200
+    assert response.json()["reviewId"] == "review-main"
+
+
+def test_story_approve_proxy_calls_catalog_approve_endpoint(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "saved", "entry": {"id": "new-story"}}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json):
+            assert url.endswith("/api/story-approve")
+            assert json["reviewId"] == "review-main"
+            return FakeResponse()
+
+    monkeypatch.setattr("app.main.httpx.AsyncClient", lambda timeout: FakeClient())
+    response = TestClient(app).post(
+        "/api/stories/approve",
+        json={"reviewId": "review-main", "draft": {"name": "새 이야기", "keywords": ["새 이야기"], "answer": "본문"}},
+    )
+    assert response.status_code == 201
+    assert response.json()["status"] == "saved"
+

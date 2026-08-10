@@ -6,6 +6,7 @@ import { createChatReply, createTask, createTaskProposal, getTaskAction, mapTask
 import "./task-form.css";
 import { commandCatalog, resolveChatCommand } from "./command-utils";
 import { scrollChatToBottom } from "./chat-scroll";
+import { buildStoryDraft, canApproveStory, reviewLabel, type StoryDraft, type StoryReview } from "./story-review-utils";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
@@ -37,6 +38,9 @@ export default function App() {
   const [storyKeywords, setStoryKeywords] = useState("");
   const [storyAnswer, setStoryAnswer] = useState("");
   const [storyNotice, setStoryNotice] = useState("");
+  const [storyDraft, setStoryDraft] = useState<StoryDraft | null>(null);
+  const [storyReview, setStoryReview] = useState<StoryReview | null>(null);
+  const [isReviewingStory, setIsReviewingStory] = useState(false);
   const [showCommandHelp, setShowCommandHelp] = useState(false);
   const currentChat = activeChat ?? "Workmate AI";
   const currentSessionId = chatSessions[currentChat];
@@ -80,15 +84,46 @@ export default function App() {
   async function addStory(event: FormEvent) {
     event.preventDefault();
     setStoryNotice("");
+    setIsReviewingStory(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/stories`, {
+      const draft = buildStoryDraft(storyName, storyKeywords, storyAnswer);
+      const response = await fetch(`${API_BASE_URL}/api/stories/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: storyName, keywords: storyKeywords.split(",").map((item) => item.trim()).filter(Boolean), answer: storyAnswer }),
+        body: JSON.stringify(draft),
       });
-      if (!response.ok) throw new Error("Story API failed");
-      setStoryName(""); setStoryKeywords(""); setStoryAnswer(""); setStoryNotice("Story saved. It can be searched immediately.");
-    } catch { setStoryNotice("Story could not be saved. Check the Catalog connection."); }
+      if (!response.ok) throw new Error("Story review API failed");
+      const review = await response.json() as StoryReview;
+      setStoryDraft(draft);
+      setStoryReview(review);
+      setStoryNotice(`Review complete: ${reviewLabel(review)}. Approval is required before saving.`);
+      if (canApproveStory(review) && window.confirm("검토를 통과했습니다. Catalog에 저장할까요?")) {
+        const approval = await fetch(`${API_BASE_URL}/api/stories/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewId: review.reviewId, draft }),
+        });
+        if (!approval.ok) throw new Error("Story approval API failed");
+        setStoryName(""); setStoryKeywords(""); setStoryAnswer(""); setStoryDraft(null); setStoryReview(null);
+        setStoryNotice("Story approved and saved to Catalog.");
+      }
+    } catch { setStoryNotice("Story could not be reviewed. Check the Catalog connection."); }
+    finally { setIsReviewingStory(false); }
+  }
+
+  async function approveStory() {
+    if (!storyDraft || !storyReview || !canApproveStory(storyReview)) return;
+    setStoryNotice("Saving approved story...");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/stories/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId: storyReview.reviewId, draft: storyDraft }),
+      });
+      if (!response.ok) throw new Error("Story approval API failed");
+      setStoryName(""); setStoryKeywords(""); setStoryAnswer(""); setStoryDraft(null); setStoryReview(null);
+      setStoryNotice("Story approved and saved to Catalog.");
+    } catch { setStoryNotice("Story could not be saved. Review may have expired."); }
   }
 
   async function confirmProposal(proposalId: string) {
