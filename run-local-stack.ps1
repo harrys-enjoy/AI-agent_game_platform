@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $workspaceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectsRoot = Split-Path -Parent $workspaceRoot
 $catalogRoot = Join-Path $projectsRoot 'Catalog & Manual(Game project)'
+$workmateRoot = Join-Path $projectsRoot 'workmate-agent-main'
 $backendRoot = Join-Path $workspaceRoot 'backend'
 $frontendRoot = Join-Path $workspaceRoot 'frontend'
 
@@ -15,9 +16,18 @@ if (-not (Test-Port 3010)) {
   Start-Process -FilePath 'node.exe' -ArgumentList 'src/server.js' -WorkingDirectory $catalogRoot -WindowStyle Hidden | Out-Null
 }
 
+$workmateToken = if ($env:WORKMATE_SERVICE_TOKEN) { $env:WORKMATE_SERVICE_TOKEN } else { 'local-test-token' }
+if (-not (Test-Port 8001)) {
+  $env:WORKMATE_SERVICE_TOKEN = $workmateToken
+  $env:APP_BASE_URL = 'http://127.0.0.1:8001/a2a'
+  Start-Process -FilePath 'C:\Anaconda3\python.exe' -ArgumentList '-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', '8001' -WorkingDirectory $workmateRoot -WindowStyle Hidden | Out-Null
+}
+
 if (-not (Test-Port 8000)) {
   $env:LIVE_AGENT_DISCOVERY = 'true'
   $env:GAME_QA_AGENT_URL = 'http://127.0.0.1:3010/message:send'
+  $env:WORKMATE_AGENT_URL = 'http://127.0.0.1:8001'
+  $env:WORKMATE_AGENT_TOKEN = $workmateToken
   Start-Process -FilePath 'C:\Anaconda3\python.exe' -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000' -WorkingDirectory $backendRoot -WindowStyle Hidden | Out-Null
 }
 
@@ -28,9 +38,10 @@ if (-not (Test-Port 5173)) {
 for ($i = 0; $i -lt 30; $i++) {
   try {
     $cat = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:3010/health' -TimeoutSec 2
+    $workmate = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8001/health/ready' -TimeoutSec 2
     $main = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/health' -TimeoutSec 2
     $ui = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:5173' -TimeoutSec 2
-    if ($cat.StatusCode -eq 200 -and $main.StatusCode -eq 200 -and $ui.StatusCode -eq 200) { break }
+    if ($cat.StatusCode -eq 200 -and $workmate.StatusCode -eq 200 -and $main.StatusCode -eq 200 -and $ui.StatusCode -eq 200) { break }
   } catch {
     Start-Sleep -Milliseconds 500
   }
@@ -43,6 +54,7 @@ $reply = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/chats/Game%20Q%26A/re
 
 [pscustomobject]@{
   cat = 'http://127.0.0.1:3010/health -> 200'
+  workmate = 'http://127.0.0.1:8001/health/ready -> 200'
   main = 'http://127.0.0.1:8000/health -> 200'
   ui = 'http://127.0.0.1:5173 -> 200'
   agents = ($agents | ConvertTo-Json -Compress)
