@@ -21,7 +21,12 @@ export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: 
   ];
   const [selectedId, setSelectedId] = useState(cards[0].id);
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
-  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : selected.id === "recording" ? <RecordingDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : selected.id === "recording" ? <RecordingDetailPanel /> : selected.id === "meetings" ? <MeetingsDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+}
+
+function MeetingsDetailPanel() {
+  const meetings = [["07", "QA 빌드 검토 회의", "오늘 15:00 · 참여자 3명", "분석 대기"], ["04", "주간 개발 회의", "8월 6일 10:00 · 참여자 4명", "분석 완료"], ["02", "캐릭터 기획 리뷰", "8월 4일 14:00 · 참여자 5명", "분석 완료"]];
+  return <article className="meetings-detail"><div className="meetings-heading"><div><span className="feature-kicker">MEETINGS</span><h1>회의 관리</h1><p>녹음, 회의록, 분석 결과를 회의별로 확인합니다.</p></div><button type="button">＋ 새 회의</button></div><div className="meeting-list">{meetings.map(([day, title, info, status]) => <div className="meeting-row" key={title}><div className="meeting-date"><strong>{day}</strong><span>AUG</span></div><div className="meeting-info"><strong>{title}</strong><span>{info}</span></div><b className={status === "분석 대기" ? "analysis-waiting" : "analysis-done"}>{status}</b><span className="meeting-arrow">⟶</span></div>)}</div></article>;
 }
 
 function RecordingDetailPanel() {
