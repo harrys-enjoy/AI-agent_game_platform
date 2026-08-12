@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { UiVariant } from "./ui-variant";
 import { quickActions } from "./ui-variant";
 
@@ -18,7 +19,9 @@ export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: 
     { ...quickActions[2], kicker: "MEETINGS", title: "회의 관리", body: "녹음, 회의록, 분석 결과를 회의별로 확인합니다.", detail: "QA 빌드 검토 회의 · 분석 대기", action: "새 회의" },
     { ...quickActions[3], kicker: "MEETING SEARCH", title: "이전 회의록 검색", body: "회의에서 결정된 내용을 근거와 함께 찾아드립니다.", detail: "QA 빌드 일정은 어느 회의에서 결정됐어?", action: "검색" },
   ];
-  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능">{cards.map((card) => <button type="button" className="workmate-feature-card" key={card.id} onClick={() => onSelect(card.prompt)}><span className="feature-kicker">{card.kicker}</span><h2>{card.title}</h2><p>{card.body}</p><span className="feature-detail">{card.detail}</span><strong className="feature-action">{card.action} ↗</strong></button>)}</section>;
+  const [selectedId, setSelectedId] = useState(cards[0].id);
+  const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav><article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article></section>;
 }
 
 export function ReferenceBriefingPanel({ kind }: { kind: "briefing" | "weekly" }) {
