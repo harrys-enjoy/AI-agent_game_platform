@@ -21,7 +21,17 @@ export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: 
   ];
   const [selectedId, setSelectedId] = useState(cards[0].id);
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
-  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav><article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article></section>;
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+}
+
+function TaskDetailPanel() {
+  const rows = [
+    ["QA 서버 빌드 배포", "이병준", "진행 중", "오늘 18:00", "높음"],
+    ["로그인 오류 원인 분석", "김서연", "지연", "8월 6일", "긴급"],
+    ["신규 캐릭터 밸런스 검토", "이병준", "할 일", "내일 12:00", "보통"],
+    ["상점 UI 문구 검수", "박지훈", "할 일", "8월 11일", "낮음"],
+  ];
+  return <article className="task-detail-panel"><div className="task-detail-heading"><div><span className="feature-kicker">TASKS</span><h1>할 일 관리</h1><p>직접 등록하거나 메일·일정·회의에서 승인한 업무입니다.</p></div><button type="button">＋ 할 일 등록</button></div><div className="task-toolbar"><div className="task-filters"><button className="active" type="button">전체 12</button><button type="button">진행 중 4</button><button type="button">지연 2</button></div><input aria-label="할 일 검색" placeholder="할 일 검색" /></div><div className="task-table"><div className="task-table-head"><span>할 일</span><span>담당자</span><span>상태</span><span>마감</span><span>중요도</span></div>{rows.map((row) => <div className="task-table-row" key={row[0]}><span>{row[0]}</span><span>{row[1]}</span><span><b className={`task-status ${row[2] === "지연" ? "delayed" : row[2] === "진행 중" ? "progress" : "todo"}`}>{row[2]}</b></span><span>{row[3]}</span><span>{row[4]}</span></div>)}</div></article>;
 }
 
 export function ReferenceBriefingPanel({ kind }: { kind: "briefing" | "weekly" }) {
