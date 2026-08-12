@@ -7,12 +7,15 @@ import "./task-form.css";
 import { commandCatalog, resolveChatCommand } from "./command-utils";
 import { scrollChatToBottom } from "./chat-scroll";
 import { buildStoryDraft, canApproveStory, reviewLabel, type StoryDraft, type StoryReview } from "./story-review-utils";
+import { buildResumeFormData, buildUnresolvedScenes, finalVideoMessageText, markSceneStatus, mergeResumeResult, type RawUnresolvedScene, type ResumeResult, type UnresolvedScene } from "./resume-utils";
+import { quickActions, readUiVariant, type UiVariant } from "./ui-variant";
+import { PoliciesPanel, QuickActions } from "./MainUiPanels";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
-type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" };
+type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] };
 type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string };
-const sections = ["Home", "Roles", "Skills", "Meetings", "My Tasks", "More"];
+const sections = ["Home", "Policies"];
 const chats = ["Workmate AI", "Video Generation", "Development Assistant", "Game Q&A"];
 const statuses = ["Ready to start", "In Progress", "Done", "Stuck", "Waiting for review"];
 const initialTasks: Task[] = [
@@ -28,6 +31,7 @@ export default function App() {
   const [chatSessions, setChatSessions] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState("Home");
   const [activeChat, setActiveChat] = useState<string | null>("Workmate AI");
+  const [uiVariant, setUiVariant] = useState<UiVariant>(() => readUiVariant(window.localStorage.getItem("main-ui-variant")));
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
   const [newTaskAgent, setNewTaskAgent] = useState(chats[0]);
@@ -76,6 +80,8 @@ export default function App() {
 
   function handleSectionClick(section: string) { const state = selectMenu({ type: "section", id: section }); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
   function handleChatClick(chatName: string) { const state = selectMenu({ type: "chat", id: chatName }, activeSection); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
+  function changeUiVariant(variant: UiVariant) { setUiVariant(variant); window.localStorage.setItem("main-ui-variant", variant); }
+  function selectQuickAction(prompt: string) { setActiveSection("Home"); setActiveChat("Workmate AI"); activeChatRef.current = "Workmate AI"; setMessage(prompt); }
   function addTask(event: FormEvent) { event.preventDefault(); const task = createTask(newTaskName, newTaskAgent, `task-${Date.now()}`); if (!task) return; setTasks((items) => [...items, task]); setNewTaskName(""); setIsAddingTask(false); }
   function startEdit(task: Task) { setEditingTaskId(task.id); setDraftTask({ ...task }); }
   function cancelEdit() { setEditingTaskId(null); setDraftTask(null); }
@@ -149,6 +155,22 @@ export default function App() {
 
   function cancelProposal(proposalId: string) { setChat((items) => items.map((item) => item.id === proposalId && item.kind === "proposal" ? { ...item, state: "cancelled" } : item)); persistMessage("assistant", "Task addition cancelled."); }
 
+  async function uploadSceneFix(messageId: string, taskId: string, sceneId: string, file: File) {
+    setChat((items) => items.map((item) => item.id === messageId && item.kind === "unresolved-scenes" ? { ...item, scenes: markSceneStatus(item.scenes, sceneId, "uploading") } : item));
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks/${encodeURIComponent(taskId)}/scenes/${encodeURIComponent(sceneId)}/resume`, { method: "POST", body: buildResumeFormData(file) });
+      if (!response.ok) throw new Error(`Resume upload failed (${response.status})`);
+      const result = await response.json() as ResumeResult;
+      setChat((items) => items.map((item) => item.id === messageId && item.kind === "unresolved-scenes" ? { ...item, scenes: mergeResumeResult(item.scenes, result) } : item));
+      const outputVideoUrl = result.output_video_url;
+      if (result.remaining_unresolved.length === 0 && outputVideoUrl) {
+        setChat((items) => [...items, { id: `video-ready-${Date.now()}`, kind: "text", text: finalVideoMessageText(outputVideoUrl) }]);
+      }
+    } catch {
+      setChat((items) => items.map((item) => item.id === messageId && item.kind === "unresolved-scenes" ? { ...item, scenes: markSceneStatus(item.scenes, sceneId, "error") } : item));
+    }
+  }
+
   function selectGameQaCommand(command: string) {
     const resolved = resolveChatCommand(command);
     if (resolved.kind !== "request") return;
@@ -193,11 +215,16 @@ export default function App() {
         }
         throw new Error(detail);
       }
-      const data = await response.json() as { answer?: string };
+      const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[] };
       const reply = data.answer || createChatReply(request);
       persistMessage("assistant", reply);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
-      setChat((items) => [...items, { id: `response-${Date.now()}`, kind: "text", text: reply }]);
+      const textMessage: ChatMessage = { id: `response-${Date.now()}`, kind: "text", text: reply };
+      if (data.taskId && data.unresolvedScenes?.length) {
+        setChat((items) => [...items, textMessage, { id: `unresolved-${Date.now()}`, kind: "unresolved-scenes", taskId: data.taskId!, scenes: buildUnresolvedScenes(data.unresolvedScenes!) }]);
+      } else {
+        setChat((items) => [...items, textMessage]);
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown agent error";
       const reply = `Main Agent 오류: ${detail}`;
@@ -208,11 +235,24 @@ export default function App() {
   }
 
   function renderChatMessage(item: ChatMessage) {
-    if (item.kind === "text") return <p className="chat-answer" key={item.id}>{item.text}</p>;
+    if (item.kind === "text") return <><QuickActions variant={uiVariant} currentChat={currentChat} onSelect={selectQuickAction} /><p className="chat-answer" key={item.id}>{item.text}</p></>;
+    if (item.kind === "unresolved-scenes") return <div className="proposal-card unresolved-scenes-card" key={item.id}><strong>수동 수정이 필요한 장면</strong>{item.scenes.map((scene) => <div className="unresolved-scene-row" key={scene.sceneId}><img className="unresolved-scene-thumb" src={scene.imageUrl} alt={scene.sceneId} /><div className="unresolved-scene-info"><b>{scene.sceneId}</b><ul>{scene.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>{scene.status === "pending" && <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadSceneFix(item.id, item.taskId, scene.sceneId, file); event.target.value = ""; }} />}{scene.status === "uploading" && <small>업로드 중...</small>}{scene.status === "error" && <small className="unresolved-scene-error">업로드 실패. 다시 시도해 주세요.</small>}</div></div>)}</div>;
     return <div className={`proposal-card ${item.state}`} key={item.id}><strong>Task proposal</strong><div className="proposal-row"><span>Task</span><b>{item.proposal.name}</b></div><div className="proposal-row"><span>Owner</span><b>{item.proposal.owner}</b></div><div className="proposal-row"><span>Status</span><b>{item.proposal.status}</b></div><div className="proposal-row"><span>Agent</span><b>{item.proposal.agent}</b></div>{item.state === "pending" && <div className="proposal-actions"><button type="button" className="save-task" onClick={() => confirmProposal(item.id)}>Add Task</button><button type="button" className="cancel-task" onClick={() => cancelProposal(item.id)}>Cancel</button></div>}{item.state === "adding" && <small>Adding task...</small>}{item.state === "added" && <small className="proposal-success">Task added to Project Task.</small>}{item.state === "cancelled" && <small>Task addition cancelled.</small>}{item.state === "error" && <small className="proposal-error">Task could not be added. Check the API connection.</small>}</div>;
   }
 
-  return <div className="shell">
+  function renderPolicies() {
+    return <section className="policies-card">
+      <div className="policies-heading"><div><p className="eyebrow">MAIN AGENT / POLICIES</p><h2>Company Policies</h2><p>팀에서 자주 확인하는 사규와 운영 기준을 한곳에서 확인하세요.</p></div><input aria-label="Search company policies" placeholder="Search policies" /></div>
+      <div className="policy-grid"><article><span>01</span><h3>근무 및 휴가</h3><p>근무시간, 휴가, 재택근무 기준</p></article><article><span>02</span><h3>보안 및 개인정보</h3><p>정보보호와 데이터 취급 기준</p></article><article><span>03</span><h3>업무 운영</h3><p>회의, 승인, 협업 운영 기준</p></article><article><span>04</span><h3>복지 및 지원</h3><p>구성원 지원 제도와 이용 안내</p></article></div>
+    </section>;
+  }
+
+  function renderQuickActions() {
+    return <div className="quick-actions" aria-label="Workmate AI quick actions">{quickActions.map((action) => <button type="button" className="quick-action" key={action.id} onClick={() => selectQuickAction(action.prompt)}><span className="quick-action-icon">↗</span><span><strong>{action.label}</strong><small>{action.prompt}</small></span></button>)}</div>;
+  }
+
+  return <div className={`shell ${uiVariant === "updated" ? "updated-ui" : "legacy-ui"}`} data-active-chat={currentChat}>
+    <div className="variant-switcher" role="group" aria-label="UI version"><span>UI</span><button className={uiVariant === "legacy" ? "selected" : ""} type="button" onClick={() => changeUiVariant("legacy")}>변경 전</button><button className={uiVariant === "updated" ? "selected" : ""} type="button" onClick={() => changeUiVariant("updated")}>변경 후</button></div>
     <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{sections.map((item) => <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item}</button>)}<hr /><small>AI Chats</small>{chats.map((item) => <button className={`chat-link ${activeChat === item ? "active" : ""}`} type="button" aria-pressed={activeChat === item} onClick={() => handleChatClick(item)} key={item}>{item}</button>)}<div className="space">Spaces <span>+</span></div><button className="chat-link" type="button" onClick={() => handleChatClick("General")}>◇ General</button></aside>
     <main className="workspace"><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>PROJECT_DEMO</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel /></main>
     <aside className="chat-panel"><h3>AI Chat · {currentChat}<button className="reset-chat" type="button" onClick={() => void resetChat()}>Reset chat</button>{currentChat === "Game Q&A" && <button className="story-toggle" type="button" onClick={() => setIsStoryFormOpen((value) => !value)}>{isStoryFormOpen ? "Close" : "+ Add story"}</button>}</h3>{currentChat === "Game Q&A" && isStoryFormOpen && <form className="story-form" onSubmit={addStory}><input value={storyName} onChange={(event) => setStoryName(event.target.value)} placeholder="Story title" required /><input value={storyKeywords} onChange={(event) => setStoryKeywords(event.target.value)} placeholder="Keywords, comma separated" required /><textarea value={storyAnswer} onChange={(event) => setStoryAnswer(event.target.value)} placeholder="Story content" rows={5} required /><button type="submit">Save story</button>{storyNotice && <small>{storyNotice}</small>}</form>}{currentChat === "Game Q&A" && showCommandHelp && <div className="command-help" role="dialog" aria-label="Game Q&A commands"><div className="command-help-heading"><strong>Game Q&A 명령어</strong><button type="button" className="command-help-close" onClick={() => setShowCommandHelp(false)}>닫기</button></div>{commandCatalog.map((item) => <button type="button" className="command-item" key={item.command} onClick={() => selectGameQaCommand(item.command)}><strong>{item.command}</strong><span>{item.label} · {item.description}</span></button>)}</div>}<div className="messages" ref={messagesRef}>{chat.length ? chat.map(renderChatMessage) : <div className="empty">Type a message to start a conversation</div>}</div><form className="composer" onSubmit={submit}><input value={message} onChange={(event) => { setMessage(event.target.value); if (currentChat === "Game Q&A" && (event.target.value === "/" || event.target.value.startsWith("/?") || event.target.value.startsWith("/help"))) setShowCommandHelp(true); }} onKeyDown={(event) => { if (event.key === "Escape") setShowCommandHelp(false); }} placeholder={currentChat === "Game Q&A" ? "Type /? for Game Q&A commands..." : "Type a message..."} /><button type="submit">➤</button></form></aside>

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { selectMenu } from "../src/menu-utils.ts";
 
 test("selects a sidebar section when a navigation item is clicked", () => {
-  assert.deepEqual(selectMenu({ type: "section", id: "Roles" }), {
-    activeSection: "Roles",
+  assert.deepEqual(selectMenu({ type: "section", id: "Policies" }), {
+    activeSection: "Policies",
     activeChat: null,
   });
 });

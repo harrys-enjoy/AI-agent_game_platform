@@ -4,5 +4,5 @@ export type MenuState = { activeSection: string; activeChat: string | null };
 export function selectMenu(selection: MenuSelection, currentSection = "Home"): MenuState {
   return selection.type === "chat"
     ? { activeSection: currentSection, activeChat: selection.id }
-    : { activeSection: selection.id, activeChat: null };
+    : { activeSection: selection.id === "Policies" ? "Policies" : "Home", activeChat: null };
 }
