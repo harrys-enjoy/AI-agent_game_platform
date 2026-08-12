@@ -22,5 +22,5 @@ export function ReportPanel({ kind }: { kind: "briefing" | "weekly" }) {
 
 export function UpdatedReportNav({ variant, activeSection, onSelect }: { variant: UiVariant; activeSection: string; onSelect: (section: string) => void }) {
   if (variant !== "updated") return null;
-  return <div className="updated-report-nav"><span>업무 보고</span><button className={activeSection === "Today Briefing" ? "active" : ""} type="button" onClick={() => onSelect("Today Briefing")}>오늘 브리핑</button><button className={activeSection === "Weekly Report" ? "active" : ""} type="button" onClick={() => onSelect("Weekly Report")}>주간 업무 보고</button></div>;
+  return <div className="updated-report-nav"><button className={activeSection === "Today Briefing" ? "active" : ""} type="button" onClick={() => onSelect("Today Briefing")}>오늘 브리핑</button><button className={activeSection === "Weekly Report" ? "active" : ""} type="button" onClick={() => onSelect("Weekly Report")}>주간 업무 보고</button></div>;
 }
