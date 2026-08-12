@@ -12,7 +12,13 @@ export function QuickActions({ variant, currentChat, onSelect }: { variant: UiVa
 
 export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: UiVariant; currentChat: string | null; onSelect: (prompt: string) => void }) {
   if (variant !== "updated" || currentChat !== "Workmate AI") return null;
-  return <nav className="task-quick-actions" aria-label="업무 빠른 메뉴">{quickActions.map((action) => <button type="button" key={action.id} onClick={() => onSelect(action.prompt)}>{action.label}</button>)}</nav>;
+  const cards = [
+    { ...quickActions[0], kicker: "TASKS", title: "할 일 관리", body: "직접 등록하거나 메일·일정·회의에서 승인한 업무입니다.", detail: "전체 12 · 진행 중 4 · 지연 2", action: "할 일 등록" },
+    { ...quickActions[1], kicker: "NEW MEETING", title: "회의 녹음 및 분석", body: "실시간으로 녹음하거나 기존 파일을 업로드하세요.", detail: "MP3, WAV, M4A · 최대 500MB", action: "녹음 시작" },
+    { ...quickActions[2], kicker: "MEETINGS", title: "회의 관리", body: "녹음, 회의록, 분석 결과를 회의별로 확인합니다.", detail: "QA 빌드 검토 회의 · 분석 대기", action: "새 회의" },
+    { ...quickActions[3], kicker: "MEETING SEARCH", title: "이전 회의록 검색", body: "회의에서 결정된 내용을 근거와 함께 찾아드립니다.", detail: "QA 빌드 일정은 어느 회의에서 결정됐어?", action: "검색" },
+  ];
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능">{cards.map((card) => <button type="button" className="workmate-feature-card" key={card.id} onClick={() => onSelect(card.prompt)}><span className="feature-kicker">{card.kicker}</span><h2>{card.title}</h2><p>{card.body}</p><span className="feature-detail">{card.detail}</span><strong className="feature-action">{card.action} ↗</strong></button>)}</section>;
 }
 
 export function ReferenceBriefingPanel({ kind }: { kind: "briefing" | "weekly" }) {
