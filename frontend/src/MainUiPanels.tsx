@@ -21,7 +21,11 @@ export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: 
   ];
   const [selectedId, setSelectedId] = useState(cards[0].id);
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
-  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : selected.id === "recording" ? <RecordingDetailPanel /> : selected.id === "meetings" ? <MeetingsDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : selected.id === "recording" ? <RecordingDetailPanel /> : selected.id === "meetings" ? <MeetingsDetailPanel /> : <MeetingSearchDetailPanel />}</section>;
+}
+
+function MeetingSearchDetailPanel() {
+  return <article className="meeting-search-detail"><span className="feature-kicker">MEETING SEARCH</span><h1>이전 회의록 검색</h1><p>회의에서 결정된 내용을 근거와 함께 찾아드립니다.</p><form className="meeting-search-form"><input aria-label="회의록 검색어" defaultValue="QA 빌드 일정은 어느 회의에서 결정됐어?" /><button type="submit">검색</button></form><section className="meeting-answer"><div className="answer-mark">W</div><div><span className="feature-kicker">WORKMATE ANSWER</span><h2>QA 빌드는 8월 12일 배포로 결정되었습니다.</h2><p>8월 6일 주간 개발 회의에서 회귀 테스트 일정을 고려해 배포 기준일을 8월 12일로 확정했습니다. QA팀은 8월 11일까지 최종 검증 결과를 공유하기로 했습니다.</p><blockquote><strong>주간 개발 회의</strong><span>2026.08.06 · 김서연 · 18:24</span><q>“회귀 테스트까지 반영해서 12일 빌드로 확정하겠습니다.”</q></blockquote></div></section></article>;
 }
 
 function MeetingsDetailPanel() {
