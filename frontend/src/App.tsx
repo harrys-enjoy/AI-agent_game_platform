@@ -9,7 +9,7 @@ import { scrollChatToBottom } from "./chat-scroll";
 import { buildStoryDraft, canApproveStory, reviewLabel, type StoryDraft, type StoryReview } from "./story-review-utils";
 import { buildResumeFormData, buildUnresolvedScenes, finalVideoMessageText, markSceneStatus, mergeResumeResult, type RawUnresolvedScene, type ResumeResult, type UnresolvedScene } from "./resume-utils";
 import { quickActions, readUiVariant, type UiVariant } from "./ui-variant";
-import { PoliciesPanel, QuickActions, ReportPanel, TaskQuickActions, UpdatedReportNav } from "./MainUiPanels";
+import { PoliciesPanel, QuickActions, ReferenceBriefingPanel, ReportPanel, TaskQuickActions, UpdatedReportNav } from "./MainUiPanels";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
@@ -250,6 +250,8 @@ export default function App() {
   function renderQuickActions() {
     return <div className="quick-actions" aria-label="Workmate AI quick actions">{quickActions.map((action) => <button type="button" className="quick-action" key={action.id} onClick={() => selectQuickAction(action.prompt)}><span className="quick-action-icon">↗</span><span><strong>{action.label}</strong><small>{action.prompt}</small></span></button>)}</div>;
   }
+
+  const referenceReportKind = activeSection === "Today Briefing" ? "briefing" : activeSection === "Weekly Report" ? "weekly" : null;
 
   const visibleSections = uiVariant === "updated" ? [...sections, "Today Briefing", "Weekly Report"] : sections;
 
