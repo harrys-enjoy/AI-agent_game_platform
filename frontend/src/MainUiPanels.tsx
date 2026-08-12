@@ -10,8 +10,8 @@ export function QuickActions({ variant, currentChat, onSelect }: { variant: UiVa
   return <div className="quick-actions" aria-label="Workmate AI quick actions">{quickActions.map((action) => <button type="button" className="quick-action" key={action.id} onClick={() => onSelect(action.prompt)}><span className="quick-action-icon">↗</span><span><strong>{action.label}</strong><small>{action.prompt}</small></span></button>)}</div>;
 }
 
-export function TaskQuickActions({ variant, onSelect }: { variant: UiVariant; onSelect: (prompt: string) => void }) {
-  if (variant !== "updated") return null;
+export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: UiVariant; currentChat: string | null; onSelect: (prompt: string) => void }) {
+  if (variant !== "updated" || currentChat !== "Workmate AI") return null;
   return <nav className="task-quick-actions" aria-label="업무 빠른 메뉴">{quickActions.map((action) => <button type="button" key={action.id} onClick={() => onSelect(action.prompt)}>{action.label}</button>)}</nav>;
 }
 
