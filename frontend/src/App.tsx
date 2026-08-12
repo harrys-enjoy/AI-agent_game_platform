@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import PreviewPanel from "./PreviewPanel";
 import "./chat-answer.css";
 import { selectMenu } from "./menu-utils";
 import { createChatReply, createTask, createTaskProposal, getTaskAction, mapTaskStatus, pollTask, shouldApplyChatResponse, updateTask } from "./task-utils";
