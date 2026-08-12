@@ -21,7 +21,11 @@ export function TaskQuickActions({ variant, currentChat, onSelect }: { variant: 
   ];
   const [selectedId, setSelectedId] = useState(cards[0].id);
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
-  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+  return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => { setSelectedId(card.id); onSelect(card.prompt); }}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel /> : selected.id === "recording" ? <RecordingDetailPanel /> : <article className="workmate-detail"><span className="feature-kicker">{selected.kicker}</span><h2>{selected.title}</h2><p>{selected.body}</p><span className="feature-detail">{selected.detail}</span><strong className="feature-action">{selected.action} ↗</strong></article>}</section>;
+}
+
+function RecordingDetailPanel() {
+  return <article className="recording-detail"><span className="feature-kicker">NEW MEETING</span><h1>회의 녹음 및 분석</h1><p>실시간으로 녹음하거나 기존 파일을 업로드하세요.</p><div className="recording-options"><section><div className="recording-icon live">●</div><h2>실시간 녹음</h2><p>마이크 음성을 실시간 자막으로 확인합니다.</p><button type="button">녹음 시작</button></section><section><div className="recording-icon upload">⇧</div><h2>녹음 파일 업로드</h2><p>MP3, WAV, M4A · 최대 500MB</p><label className="upload-button">파일 선택<input type="file" accept="audio/mpeg,audio/wav,audio/x-m4a,.mp3,.wav,.m4a" /></label></section></div></article>;
 }
 
 function TaskDetailPanel() {
