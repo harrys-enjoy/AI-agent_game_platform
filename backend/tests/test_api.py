@@ -1,5 +1,6 @@
 ﻿from uuid import uuid4
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -132,6 +133,24 @@ def test_main_chat_routes_lore_question_to_game_qna_agent():
     assert response.json()["agent"] == "game-qna-agent"
 
 
+def test_all_chat_inputs_can_be_routed_by_router_llm(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            assert "사용자 요청" in request
+            return {"selected_agents": ["dev-agent"], "confidence": 0.97}
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post(
+        "/api/chats/Video Generation/reply",
+        json={"content": "이 코드의 오류를 찾아줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent"] == "dev-agent"
+
+
 def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
     class FakeResponse:
         def raise_for_status(self):
@@ -188,4 +207,97 @@ def test_story_approve_proxy_calls_catalog_approve_endpoint(monkeypatch):
     )
     assert response.status_code == 201
     assert response.json()["status"] == "saved"
+
+
+def test_chat_reply_passes_through_unresolved_scenes_when_present(monkeypatch):
+    from app.main import LocalClient
+
+    async def fake_send_message(self, agent_url, request, headers=None):
+        return {
+            "status": "succeeded",
+            "answer": "일부 장면에 수동 수정이 필요합니다",
+            "task": {
+                "id": "task_abc123",
+                "status": {
+                    "state": "TASK_STATE_COMPLETED",
+                    "unresolvedScenes": [
+                        {"sceneId": "scene_04", "imageUrl": "http://localhost:8002/media/cand_1.png", "issues": ["too wide"]}
+                    ],
+                },
+            },
+        }
+
+    monkeypatch.setenv("LIVE_AGENT_DISCOVERY", "false")
+    monkeypatch.setattr(LocalClient, "send_message", fake_send_message)
+    response = TestClient(app).post("/api/chats/Video Generation/reply", json={"content": "할로윈 이벤트 영상 만들어줘"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["taskId"] == "task_abc123"
+    assert body["unresolvedScenes"] == [
+        {"sceneId": "scene_04", "imageUrl": "http://localhost:8002/media/cand_1.png", "issues": ["too wide"]}
+    ]
+
+
+def test_chat_reply_omits_unresolved_scenes_key_when_absent():
+    body = TestClient(app).post("/api/chats/Game Q&A/reply", json={"content": "홍길동"}).json()
+
+    assert "unresolvedScenes" not in body
+    assert "taskId" not in body
+
+
+def test_resume_video_scene_proxies_upload_and_returns_video_agent_response(monkeypatch):
+    async def fake_post(self, url, *, files=None, headers=None):
+        assert url == "http://video-agent:8002/tasks/task_abc123/scenes/scene_04/resume"
+        assert "file" in files
+        return httpx.Response(
+            200,
+            json={
+                "scene_id": "scene_04",
+                "resolved": True,
+                "remaining_unresolved": [],
+                "output_video_url": "http://localhost:8002/media/proj_x.mp4",
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = TestClient(app).post(
+        "/api/video-agent/tasks/task_abc123/scenes/scene_04/resume",
+        files={"file": ("fixed.png", b"fake-image-bytes", "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["output_video_url"] == "http://localhost:8002/media/proj_x.mp4"
+
+
+def test_resume_video_scene_maps_video_agent_error_response(monkeypatch):
+    async def fake_post(self, url, *, files=None, headers=None):
+        return httpx.Response(
+            404,
+            json={"error": {"code": 404, "status": "NOT_FOUND", "message": "Unknown task: task_bad"}},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = TestClient(app).post(
+        "/api/video-agent/tasks/task_bad/scenes/scene_04/resume",
+        files={"file": ("fixed.png", b"fake-image-bytes", "image/png")},
+    )
+
+    assert response.status_code == 404
+    assert "Unknown task: task_bad" in response.json()["detail"]["message"]
+
+
+def test_resume_video_scene_returns_502_when_video_agent_unreachable(monkeypatch):
+    async def fake_post(self, url, *, files=None, headers=None):
+        raise httpx.ConnectError("Connection refused", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = TestClient(app).post(
+        "/api/video-agent/tasks/task_x/scenes/scene_04/resume",
+        files={"file": ("fixed.png", b"fake-image-bytes", "image/png")},
+    )
+
+    assert response.status_code == 502
 

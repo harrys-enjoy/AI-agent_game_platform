@@ -3,7 +3,7 @@ import re
 from typing import Literal
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,7 @@ from .errors import A2AError
 from .main_agent_prompt import get_agent_system_prompt
 from .orchestrator import Orchestrator
 from .registry import AgentRegistry
+from .router import RouterLLM
 from .task_store import TaskStore
 
 
@@ -33,6 +34,7 @@ app.add_middleware(
 store = TaskStore("main_agent.db")
 conversation_store = ConversationStore("main_agent.db")
 registry: AgentRegistry
+router = RouterLLM()
 
 
 class TaskRequest(BaseModel):
@@ -47,6 +49,12 @@ class ChatMessageRequest(BaseModel):
 
 class ChatReplyRequest(BaseModel):
     content: str
+
+
+class RouteRequest(BaseModel):
+    question: str
+    locale: str | None = "ko"
+    mode: str | None = None
 
 
 class StoryCreateRequest(BaseModel):
@@ -81,6 +89,7 @@ CHAT_AGENT_NAMES = {
     "Video Generation": "video-agent",
     "Development Assistant": "dev-agent",
     "Game Q&A": "game-qna-agent",
+    "Cat AI Chat": "workmate-agent",
 }
 
 GAME_QNA_COMMANDS = {
@@ -132,10 +141,20 @@ def parse_game_qna_command(content: str) -> dict:
     }
 
 
-def resolve_chat_agent(agent_name: str, content: str) -> str:
+def resolve_chat_agent_fallback(agent_name: str, content: str) -> str:
     if agent_name == "Workmate AI" and re.search(r"홍길동|전우치|세계관|스토리|lore|game|게임", content, re.IGNORECASE):
         return "game-qna-agent"
     return CHAT_AGENT_NAMES.get(agent_name, agent_name)
+
+
+async def resolve_chat_agent(agent_name: str, content: str) -> str:
+    command = parse_game_qna_command(content)
+    if command["kind"] in {"help", "request"} and content.strip().startswith("/"):
+        return "game-qna-agent"
+    routed = await router.select(f"사용자 요청:\n{content}")
+    if routed and routed["selected_agents"]:
+        return routed["selected_agents"][0]
+    return resolve_chat_agent_fallback(agent_name, content)
 
 
 def build_agent_request(agent_name: str, message: str, mode: str | None = None) -> dict:
@@ -189,7 +208,7 @@ def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str,
 async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="Message is required")
-    card_name = resolve_chat_agent(agent_name, payload.content)
+    card_name = await resolve_chat_agent(agent_name, payload.content)
     configured_card = next((card for card in cards if card.name == card_name), None)
     if configured_card is None:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -205,6 +224,18 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
         request["mode"] = command["mode"] if command else "lore"
     try:
         result = await client.send_message(card.url, request, headers=registry.headers(card_name))
+        review = await router.review(payload.content, card_name, result.get("answer") or result.get("summary") or "") if hasattr(router, "review") else None
+        replacement = review.get("replacement_agent") if review and not review["accepted"] else None
+        if replacement and replacement != card_name:
+            replacement_card = live_cards.get(replacement) if live_cards else next((item for item in cards if item.name == replacement), None)
+            if replacement_card:
+                card_name = replacement
+                card = replacement_card
+                command = parse_game_qna_command(payload.content) if card_name == "game-qna-agent" else None
+                request = build_agent_request(card_name, command["content"] if command else payload.content)
+                if card_name == "game-qna-agent":
+                    request["mode"] = command["mode"] if command else "lore"
+                result = await client.send_message(card.url, request, headers=registry.headers(card_name))
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except Exception as exc:
@@ -214,13 +245,26 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if card_name == "game-qna-agent" and not answer.startswith("[Source:"):
         source_label = GAME_QNA_SOURCE_LABELS.get(effective_mode, "Source: Game Q&A")
         answer = f"[{source_label}]\n{answer}"
-    return {
+    response_body = {
         "answer": answer,
         "agent": card_name,
         "mode": effective_mode,
         "command": command.get("command") if command and command["kind"] == "request" else None,
         "status": result.get("status", "succeeded"),
     }
+    task = result.get("task") or {}
+    unresolved_scenes = (task.get("status") or {}).get("unresolvedScenes")
+    if unresolved_scenes:
+        response_body["taskId"] = task.get("id")
+        response_body["unresolvedScenes"] = unresolved_scenes
+    return response_body
+
+
+@app.post("/api/route")
+async def route_request(payload: RouteRequest) -> dict:
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question is required")
+    return await chat_reply("Cat AI Chat", ChatReplyRequest(content=payload.question))
 
 
 def catalog_base_url() -> str:
@@ -253,8 +297,8 @@ async def create_task(payload: TaskRequest, background_tasks: BackgroundTasks) -
     live_cards = await registry.refresh() if os.getenv("LIVE_AGENT_DISCOVERY", "false").lower() == "true" else {}
     active_cards = list(live_cards.values()) or cards
     client = A2AClient() if live_cards else LocalClient()
-    orchestrator = Orchestrator(client, store)
-    selected = orchestrator._select(payload.request, active_cards)
+    orchestrator = Orchestrator(client, store, router=router)
+    selected = await orchestrator.select(payload.request, active_cards)
     task = store.create(payload.request, [card.name for card in selected])
 
     async def run_existing() -> None:
@@ -314,3 +358,27 @@ async def retry_task(task_id: str, background_tasks: BackgroundTasks) -> dict[st
 
     background_tasks.add_task(rerun)
     return {"task_id": task_id, "status": "running"}
+
+
+@app.post("/api/video-agent/tasks/{task_id}/scenes/{scene_id}/resume")
+async def resume_video_scene(task_id: str, scene_id: str, file: UploadFile = File(...)) -> dict:
+    config = registry.config("video-agent")
+    contents = await file.read()
+    resume_url = f"{config.base_url}/tasks/{task_id}/scenes/{scene_id}/resume"
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                resume_url,
+                files={"file": (file.filename, contents, file.content_type)},
+                headers=registry.headers("video-agent"),
+            )
+        if response.is_error:
+            try:
+                raise A2AError.from_payload(response.json(), response.status_code)
+            except ValueError:
+                raise RuntimeError(f"video-agent HTTP {response.status_code}: {response.text}") from None
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return response.json()

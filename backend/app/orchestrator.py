@@ -5,9 +5,10 @@ from .task_store import TaskStore
 
 
 class Orchestrator:
-    def __init__(self, client, store: TaskStore | None = None):
+    def __init__(self, client, store: TaskStore | None = None, router=None):
         self.client = client
         self.store = store or TaskStore()
+        self.router = router
 
     def _select(self, request: str, cards: list[AgentCard]) -> list[AgentCard]:
         terms = {
@@ -18,6 +19,15 @@ class Orchestrator:
         }
         selected = [card for card in cards if any(term.lower() in request.lower() for term in terms.get(card.name, ())) ]
         return selected or cards[:1]
+
+    async def select(self, request: str, cards: list[AgentCard]) -> list[AgentCard]:
+        if self.router is not None:
+            routed = await self.router.select(request)
+            if routed:
+                selected = [card for card in cards if card.name in routed["selected_agents"]]
+                if selected:
+                    return selected
+        return self._select(request, cards)
 
     async def run(self, request: str, cards: list[AgentCard]) -> TaskRecord:
         selected = self._select(request, cards)

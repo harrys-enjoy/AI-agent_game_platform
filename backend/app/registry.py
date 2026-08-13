@@ -50,7 +50,7 @@ class AgentRegistry:
                 url = url or environ.get("GAME_QA_AGENT_URL")
             url = url or defaults.get(name)
             if url:
-                token = environ.get(f"{env_name}_AGENT_TOKEN") or None
+                token = environ.get(f"{env_name}_SERVICE_TOKEN") or environ.get(f"{env_name}_AGENT_TOKEN") or None
                 registry.register(name, url, token)
         return registry
 

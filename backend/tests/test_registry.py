@@ -59,3 +59,14 @@ def test_registry_keeps_legacy_game_url_fallback():
     })
 
     assert registry.config("game-qna-agent").base_url == "http://legacy-game:3010"
+
+
+def test_registry_reads_service_token_with_endpoint_url():
+    registry = AgentRegistry.from_environment({
+        "AGENT_REGISTRY": "workmate-agent",
+        "WORKMATE_AGENT_URL": "http://workmate-agent:8001/a2a",
+        "WORKMATE_SERVICE_TOKEN": "service-token",
+    })
+
+    assert registry.config("workmate-agent").base_url == "http://workmate-agent:8001"
+    assert registry.headers("workmate-agent") == {"Authorization": "Bearer service-token"}

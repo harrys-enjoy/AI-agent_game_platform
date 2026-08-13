@@ -9,6 +9,11 @@ class FakeClient:
         return {"agent": agent_url, "summary": request["message"]}
 
 
+class FakeRouter:
+    async def select(self, request):
+        return {"selected_agents": ["game-qna-agent"], "confidence": 0.95}
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_runs_compound_request():
     cards = [
@@ -19,3 +24,14 @@ async def test_orchestrator_runs_compound_request():
 
     assert result.status == "succeeded"
     assert len(result.result["results"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_prefers_router_selection():
+    cards = [
+        AgentCard(name="dev-agent", description="development", url="dev", skills=[]),
+        AgentCard(name="game-qna-agent", description="game", url="game", skills=[]),
+    ]
+    selected = await Orchestrator(FakeClient(), router=FakeRouter()).select("세계관 캐릭터를 정리해줘", cards)
+
+    assert [card.name for card in selected] == ["game-qna-agent"]

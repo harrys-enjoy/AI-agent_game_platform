@@ -13,6 +13,7 @@ function Test-Port($port) {
 if (-not (Test-Port 3010)) {
   $env:PORT = '3010'
   $env:AGENT_PUBLIC_URL = 'http://127.0.0.1:3010'
+  $env:MAIN_AGENT_URL = 'http://127.0.0.1:8000'
   Start-Process -FilePath 'node.exe' -ArgumentList 'src/server.js' -WorkingDirectory $catalogRoot -WindowStyle Hidden | Out-Null
 }
 

@@ -3,17 +3,24 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    # Reuse Cat's server-side NVIDIA model settings without copying the API key.
+    env_file:
+      - "../Catalog & Manual(Game project)/.env"
     environment:
       LIVE_AGENT_DISCOVERY: "true"
       AGENT_REGISTRY: "workmate-agent,video-agent,dev-agent,game-qna-agent"
-      WORKMATE_AGENT_URL: "http://workmate-agent:8001"
-      VIDEO_AGENT_URL: "http://video-agent:8002"
-      DEV_AGENT_URL: "http://dev-agent:8003"
-      GAME_QNA_AGENT_URL: "http://game-qa-agent:3000"
-      WORKMATE_AGENT_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
-      VIDEO_AGENT_TOKEN: "${VIDEO_AGENT_TOKEN:-}"
-      DEV_AGENT_TOKEN: "${DEV_AGENT_TOKEN:-}"
-      GAME_QNA_AGENT_TOKEN: "${GAME_QNA_AGENT_TOKEN:-}"
+      WORKMATE_AGENT_URL: "http://workmate-agent:8001/a2a"
+      VIDEO_AGENT_URL: "http://video-agent:8002/a2a"
+      DEV_AGENT_URL: "http://dev-agent:8003/a2a"
+      GAME_QNA_AGENT_URL: "http://game-qa-agent:3000/message:send"
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      VIDEO_SERVICE_TOKEN: "${VIDEO_SERVICE_TOKEN:-}"
+      DEV_SERVICE_TOKEN: "${DEV_SERVICE_TOKEN:-}"
+      GAME_QNA_SERVICE_TOKEN: "${GAME_QNA_SERVICE_TOKEN:-}"
+      ROUTER_MODEL_NAME: "${ROUTER_MODEL_NAME:-}"
+      ROUTER_BASE_URL: "${ROUTER_BASE_URL:-https://integrate.api.nvidia.com/v1}"
+      ROUTER_API_KEY: "${ROUTER_API_KEY:-}"
+      ROUTER_TIMEOUT_SECONDS: "${ROUTER_TIMEOUT_SECONDS:-8}"
     depends_on:
       workmate-agent:
         condition: service_healthy
@@ -59,6 +66,7 @@ services:
     environment:
       PORT: "3000"
       AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
+      MAIN_AGENT_URL: "http://main-agent:8000"
 
 networks:
   default:
