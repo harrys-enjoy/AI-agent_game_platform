@@ -10,7 +10,7 @@ function task(state: Task["status"]["state"]): Task {
 
 describe("useVideoTaskPolling", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
