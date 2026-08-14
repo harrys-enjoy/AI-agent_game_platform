@@ -4,6 +4,10 @@ export type ImportedStoryDraft = {
   answer: string;
 };
 
+export function storyEditorText(text: string): string {
+  return text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+}
+
 const HEADER_NAMES = {
   title: ["title", "name", "제목", "스토리 제목"],
   keywords: ["keywords", "keyword", "tags", "키워드", "태그"],
@@ -21,7 +25,7 @@ function readHeader(line: string): { kind: "title" | "keywords" | "content"; val
 }
 
 export function parseStoryText(text: string, fileName = "story.txt"): ImportedStoryDraft {
-  const lines = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = storyEditorText(text).split("\n");
   const nonEmpty = lines.map((line) => line.trim()).filter(Boolean);
   const titleHeader = lines.map(readHeader).find((header) => header?.kind === "title");
   const keywordHeader = lines.map(readHeader).find((header) => header?.kind === "keywords");
@@ -30,6 +34,20 @@ export function parseStoryText(text: string, fileName = "story.txt"): ImportedSt
   const keywords = keywordHeader?.value.split(",").map((item) => item.trim()).filter(Boolean) ?? [];
   const answer = contentIndex >= 0
     ? lines.slice(contentIndex + 1).join("\n").trim()
-    : (titleHeader || keywordHeader ? lines.filter((line) => !readHeader(line)).join("\n").trim() : lines.slice(1).join("\n").trim());
+    : (titleHeader || keywordHeader
+      ? lines.filter((line) => !readHeader(line)).join("\n").trim()
+      : nonEmpty.length === 1
+        ? nonEmpty[0]
+        : lines.slice(1).join("\n").trim());
   return { name, keywords, answer };
+}
+
+export function normalizeStoryReviewInput(text: string, fileName = "story.txt"): ImportedStoryDraft {
+  const parsed = parseStoryText(text, fileName);
+  const rawText = text.trim();
+  if (rawText && !readHeader(rawText) && !/[\r\n]/.test(rawText)) {
+    return { name: "스토리 검토 초안", keywords: ["스토리 검토"], answer: rawText };
+  }
+  if (parsed.answer || !rawText) return parsed;
+  return { name: "스토리 검토 초안", keywords: ["스토리 검토"], answer: rawText };
 }

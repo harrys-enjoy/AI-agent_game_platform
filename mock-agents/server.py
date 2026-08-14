@@ -26,3 +26,10 @@ def card():
 def a2a(payload: dict):
     message = payload.get("params", {}).get("message", "")
     return {"jsonrpc": "2.0", "id": payload.get("id"), "result": {"status": "succeeded", "agent": name, "summary": f"{name} 처리 결과: {message}"}}
+
+
+@app.post("/a2a/message:send")
+def a2a_http_json(payload: dict):
+    parts = payload.get("message", {}).get("parts", [])
+    message = "\n".join(part.get("text", "") for part in parts if isinstance(part, dict))
+    return {"message": {"parts": [{"text": f"{name} 처리 결과: {message}"}]}}

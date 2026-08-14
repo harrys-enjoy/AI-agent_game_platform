@@ -63,6 +63,8 @@ services:
   game-qa-agent:
     build: "../Catalog & Manual(Game project)"
     expose: ["3000"]
+    env_file:
+      - "../Catalog & Manual(Game project)/.env"
     environment:
       PORT: "3000"
       AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
