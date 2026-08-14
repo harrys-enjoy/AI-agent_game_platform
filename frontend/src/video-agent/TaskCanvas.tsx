@@ -11,7 +11,7 @@ type Props = {
 export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: Props) {
   if (!task) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-400" data-testid="canvas-idle">
+      <div className="flex h-full items-center justify-center text-brief-muted" data-testid="canvas-idle">
         브리프를 작성하고 생성 요청을 눌러주세요.
       </div>
     );
@@ -22,8 +22,8 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
   if (state === "TASK_STATE_SUBMITTED" || state === "TASK_STATE_WORKING") {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3" data-testid="canvas-working">
-        <span className="h-10 w-10 animate-spin rounded-full border-4 border-slate-300 border-t-slate-900" />
-        <p>영상 생성 중...</p>
+        <span className="h-10 w-10 animate-spin rounded-full border-4 border-brief-border border-t-brief-accent" />
+        <p className="text-brief-text">영상 생성 중...</p>
       </div>
     );
   }
@@ -32,8 +32,12 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
     return (
       <div className="flex flex-col gap-3" data-testid="canvas-input-required">
         {unresolvedScenes.map((scene) => (
-          <div key={scene.sceneId} className="rounded border border-slate-300 p-3" data-testid={`scene-card-${scene.sceneId}`}>
-            <img src={scene.imageUrl} alt={scene.sceneId} className="mb-2 max-h-32 rounded" />
+          <div
+            key={scene.sceneId}
+            className="rounded-[15px] border border-brief-border bg-white p-3"
+            data-testid={`scene-card-${scene.sceneId}`}
+          >
+            <img src={scene.imageUrl} alt={scene.sceneId} className="mb-2 max-h-32 rounded-[8px]" />
             <ul className="mb-2 text-sm text-red-600">
               {scene.issues.map((issue) => (
                 <li key={issue}>{issue}</li>
@@ -61,7 +65,7 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
       ?.flatMap((artifact) => artifact.parts)
       .find((part) => typeof part.data?.output_video_url === "string")?.data?.output_video_url as string | undefined;
     return videoUrl ? (
-      <video src={videoUrl} controls className="max-h-full rounded" data-testid="canvas-completed" />
+      <video src={videoUrl} controls className="max-h-full rounded-[15px]" data-testid="canvas-completed" />
     ) : (
       <div data-testid="canvas-completed-no-video">완료되었지만 영상 URL을 찾을 수 없습니다.</div>
     );
@@ -74,9 +78,13 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3" data-testid="canvas-error">
-      {failureReason && <p data-testid="canvas-error-reason">{failureReason}</p>}
-      <p>{state === "TASK_STATE_CANCELED" ? "취소되었습니다." : "생성에 실패했습니다."}</p>
-      <button type="button" onClick={onRetry} className="rounded bg-slate-900 px-3 py-2 text-sm text-white">
+      {failureReason && (
+        <p className="text-brief-text" data-testid="canvas-error-reason">
+          {failureReason}
+        </p>
+      )}
+      <p className="text-brief-text">{state === "TASK_STATE_CANCELED" ? "취소되었습니다." : "생성에 실패했습니다."}</p>
+      <button type="button" onClick={onRetry} className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white">
         다시 시도
       </button>
     </div>

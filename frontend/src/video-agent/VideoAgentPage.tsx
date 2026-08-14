@@ -1,4 +1,3 @@
-// frontend/src/video-agent/VideoAgentPage.tsx
 import "./styles.css";
 import { useEffect, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
@@ -75,9 +74,9 @@ export function VideoAgentPage() {
   const isBusy = task?.status.state === "TASK_STATE_SUBMITTED" || task?.status.state === "TASK_STATE_WORKING";
 
   return (
-    <div className="grid h-screen grid-cols-[minmax(280px,360px)_1fr] gap-4 bg-slate-50 p-4">
-      <aside className="flex flex-col gap-3 rounded-lg bg-white p-4 shadow-sm">
-        <h1 className="text-lg font-semibold">영상 생성</h1>
+    <div className="grid h-full grid-cols-[minmax(280px,360px)_1fr] gap-4 bg-brief-bg p-4">
+      <aside className="flex flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
+        <h1 className="text-lg font-semibold text-brief-text">영상 생성</h1>
         <ComposerTabs
           chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
           form={<FormComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
@@ -104,12 +103,16 @@ export function VideoAgentPage() {
           </p>
         )}
         {isBusy && (
-          <button type="button" onClick={handleCancel} className="rounded border border-slate-300 px-3 py-2 text-sm">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="rounded-[8px] border border-brief-border px-3 py-2 text-sm text-brief-text"
+          >
             취소
           </button>
         )}
       </aside>
-      <main className="rounded-lg bg-white p-4 shadow-sm">
+      <main className="rounded-[15px] border border-brief-border bg-white p-4">
         <TaskCanvas task={task} unresolvedScenes={unresolvedScenes} onUploadScene={handleUploadScene} onRetry={handleRetry} />
       </main>
     </div>

@@ -28,7 +28,7 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         onChange={(event) => setBrief(event.target.value)}
         placeholder="브리프 (필수)"
         aria-label="브리프"
-        className="min-h-16 rounded border border-slate-300 p-2 text-sm"
+        className="min-h-16 rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
       />
       <input
         value={durationSec}
@@ -36,15 +36,25 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         placeholder="길이(초)"
         aria-label="길이(초)"
         inputMode="numeric"
-        className="rounded border border-slate-300 p-2 text-sm"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
       />
-      <select value={preset} onChange={(event) => setPreset(event.target.value)} aria-label="프리셋" className="rounded border border-slate-300 p-2 text-sm">
+      <select
+        value={preset}
+        onChange={(event) => setPreset(event.target.value)}
+        aria-label="프리셋"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+      >
         <option value="">프리셋 선택 안 함</option>
         <option value="이벤트">이벤트</option>
         <option value="공개">공개</option>
         <option value="커뮤니티">커뮤니티</option>
       </select>
-      <select value={sceneType} onChange={(event) => setSceneType(event.target.value)} aria-label="씬 종류" className="rounded border border-slate-300 p-2 text-sm">
+      <select
+        value={sceneType}
+        onChange={(event) => setSceneType(event.target.value)}
+        aria-label="씬 종류"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+      >
         <option value="">씬 종류 선택 안 함</option>
         <option value="인게임">인게임</option>
         <option value="스튜디오">스튜디오</option>
@@ -55,12 +65,12 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         placeholder="예산(달러)"
         aria-label="예산(달러)"
         inputMode="decimal"
-        className="rounded border border-slate-300 p-2 text-sm"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
       />
       <button
         type="submit"
         disabled={disabled || brief.trim().length < 5}
-        className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-40"
+        className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white disabled:opacity-40"
       >
         생성 요청
       </button>
