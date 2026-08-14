@@ -12,6 +12,17 @@ const LABELS: Record<TaskState, string> = {
   TASK_STATE_REJECTED: "거부됨",
 };
 
+const DOT_COLORS: Record<TaskState, string> = {
+  TASK_STATE_SUBMITTED: "text-brief-accent",
+  TASK_STATE_WORKING: "text-brief-accent",
+  TASK_STATE_INPUT_REQUIRED: "text-amber-600",
+  TASK_STATE_AUTH_REQUIRED: "text-amber-600",
+  TASK_STATE_COMPLETED: "text-brief-accent-dark",
+  TASK_STATE_FAILED: "text-red-600",
+  TASK_STATE_CANCELED: "text-brief-muted",
+  TASK_STATE_REJECTED: "text-red-600",
+};
+
 export function StatusBadge({ state, startedAt }: { state: TaskState; startedAt: number }) {
   const [elapsedSec, setElapsedSec] = useState(() => Math.floor((Date.now() - startedAt) / 1000));
 
@@ -21,9 +32,13 @@ export function StatusBadge({ state, startedAt }: { state: TaskState; startedAt:
   }, [startedAt]);
 
   return (
-    <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm" data-testid="status-badge">
+    <div
+      className="flex items-center gap-2 rounded-full border border-brief-border bg-white px-3 py-1 text-sm text-brief-text"
+      data-testid="status-badge"
+    >
+      <span aria-hidden className={DOT_COLORS[state]}>●</span>
       <span>{LABELS[state]}</span>
-      <span className="text-slate-400">{elapsedSec}s</span>
+      <span className="text-brief-muted">{elapsedSec}s</span>
     </div>
   );
 }
