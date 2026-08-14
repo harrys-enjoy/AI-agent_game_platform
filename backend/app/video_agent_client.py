@@ -15,9 +15,16 @@ def _headers(registry: AgentRegistry) -> dict[str, str]:
     return headers
 
 
-async def _call(url: str, method: Literal["post", "get"], *, headers: dict[str, str], json: dict | None = None) -> dict[str, Any]:
+async def _call(
+    url: str,
+    method: Literal["post", "get"],
+    *,
+    headers: dict[str, str],
+    json: dict | None = None,
+    timeout: float = 10.0,
+) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             if method == "post":
                 response = await client.post(url, json=json, headers=headers)
             else:
@@ -41,7 +48,7 @@ async def _call(url: str, method: Literal["post", "get"], *, headers: dict[str, 
 async def send_message(registry: AgentRegistry, text: str) -> dict[str, Any]:
     config = registry.config("video-agent")
     body = {"message": {"messageId": str(uuid.uuid4()), "role": "ROLE_USER", "parts": [{"text": text}]}}
-    return await _call(f"{config.base_url}/a2a/message:send", "post", headers=_headers(registry), json=body)
+    return await _call(f"{config.base_url}/a2a/message:send", "post", headers=_headers(registry), json=body, timeout=60.0)
 
 
 async def get_task(registry: AgentRegistry, task_id: str) -> dict[str, Any]:

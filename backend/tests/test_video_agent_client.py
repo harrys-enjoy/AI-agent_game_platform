@@ -142,3 +142,64 @@ async def test_send_message_raises_runtime_error_on_non_json_200_response(monkey
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
     with pytest.raises(RuntimeError, match="non-JSON response"):
         await send_message(_registry(), "브리프")
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "TASK_STATE_SUBMITTED",
+        "TASK_STATE_WORKING",
+        "TASK_STATE_INPUT_REQUIRED",
+        "TASK_STATE_AUTH_REQUIRED",
+        "TASK_STATE_COMPLETED",
+        "TASK_STATE_FAILED",
+        "TASK_STATE_CANCELED",
+        "TASK_STATE_REJECTED",
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_task_passes_through_every_task_state_faithfully(monkeypatch, state):
+    async def fake_get(self, url, *, headers=None):
+        return httpx.Response(
+            200,
+            json={"task": {"id": "task_1", "contextId": "ctx_1", "status": {"state": state}}},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    result = await get_task(_registry(), "task_1")
+
+    assert result["task"]["status"]["state"] == state
+
+
+@pytest.mark.asyncio
+async def test_get_task_preserves_both_text_and_data_artifact_parts(monkeypatch):
+    async def fake_get(self, url, *, headers=None):
+        return httpx.Response(
+            200,
+            json={
+                "task": {
+                    "id": "task_1",
+                    "contextId": "ctx_1",
+                    "status": {"state": "TASK_STATE_COMPLETED"},
+                    "artifacts": [
+                        {
+                            "artifactId": "a1",
+                            "name": "영상 초안 결과",
+                            "parts": [
+                                {"text": "영상이 완성되었습니다"},
+                                {"data": {"output_video_url": "http://x/video.mp4"}},
+                            ],
+                        }
+                    ],
+                }
+            },
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    result = await get_task(_registry(), "task_1")
+
+    parts = result["task"]["artifacts"][0]["parts"]
+    assert parts[0]["text"] == "영상이 완성되었습니다"
+    assert parts[1]["data"]["output_video_url"] == "http://x/video.mp4"
