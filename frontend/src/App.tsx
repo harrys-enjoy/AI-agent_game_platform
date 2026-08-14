@@ -115,6 +115,7 @@ export default function App() {
     function routeFromMain(event: Event) {
       const detail = (event as CustomEvent<{ chat: string; message: string }>).detail;
       if (!detail?.chat) return;
+      if (detail.chat === activeChatRef.current) return;
       activateChatTask(detail.chat);
       activeChatRef.current = detail.chat;
       setActiveSection("Home");

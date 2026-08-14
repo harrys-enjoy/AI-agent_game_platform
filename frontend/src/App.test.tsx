@@ -46,4 +46,31 @@ describe("App - Video Generation sidebar entry", () => {
     expect(await screen.findByPlaceholderText("다른 업무나 질문을 입력하세요")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("무엇을 도와드릴까요?")).not.toBeInTheDocument();
   });
+
+  it("routes away from Video Generation when the routing chatbot matches a different agent", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByText("Video Generation"));
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
+
+    const chatbotInput = screen.getByPlaceholderText("다른 업무나 질문을 입력하세요");
+    await userEvent.type(chatbotInput, "코드 버그 확인해줘");
+    const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
+    await userEvent.click(chatbotSubmit);
+
+    expect(await screen.findByPlaceholderText("Type a message...")).toBeInTheDocument();
+    expect(screen.queryByLabelText("영상 브리프")).not.toBeInTheDocument();
+  });
+
+  it("keeps the video-agent page in place when the routing chatbot gets a non-matching message", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByText("Video Generation"));
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
+
+    const chatbotInput = screen.getByPlaceholderText("다른 업무나 질문을 입력하세요");
+    await userEvent.type(chatbotInput, "안녕하세요");
+    const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
+    await userEvent.click(chatbotSubmit);
+
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
+  });
 });
