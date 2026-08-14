@@ -9,9 +9,22 @@ import { cancelVideoAgentTask, createVideoAgentTask, resumeVideoAgentScene } fro
 import { useVideoTaskPolling } from "./use-video-task-polling";
 import { buildUnresolvedScenes, markSceneStatus, mergeResumeResult, type UnresolvedScene } from "../resume-utils";
 
-export function VideoAgentPage() {
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState(() => Date.now());
+const STORAGE_KEY = "video-agent-active-task";
+
+function readPersistedTask(): { taskId: string; startedAt: number } | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { taskId: string; startedAt: number };
+    return typeof parsed.taskId === "string" && typeof parsed.startedAt === "number" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {}) {
+  const [taskId, setTaskId] = useState<string | null>(() => readPersistedTask()?.taskId ?? null);
+  const [startedAt, setStartedAt] = useState(() => readPersistedTask()?.startedAt ?? Date.now());
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
@@ -33,6 +46,7 @@ export function VideoAgentPage() {
       if ("task" in response) {
         setTaskId(response.task.id);
         setStartedAt(Date.now());
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ taskId: response.task.id, startedAt: Date.now() }));
         setUnresolvedScenes([]);
       } else {
         setClarifyingQuestion(response.message.parts.map((part) => part.text).filter(Boolean).join("\n"));
@@ -67,6 +81,7 @@ export function VideoAgentPage() {
 
   function handleRetry() {
     setTaskId(null);
+    window.localStorage.removeItem(STORAGE_KEY);
     setUnresolvedScenes([]);
     setClarifyingQuestion(null);
   }
@@ -78,7 +93,7 @@ export function VideoAgentPage() {
       <aside className="flex flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
         <h1 className="text-lg font-semibold text-brief-text">영상 생성</h1>
         <ComposerTabs
-          chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
+          chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} initialValue={initialBrief} />}
           form={<FormComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
         />
         {clarifyingQuestion && (

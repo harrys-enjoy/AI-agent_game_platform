@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  .video-agent-host *, .video-agent-host ::before, .video-agent-host ::after {
+    border-width: 0;
+    border-style: solid;
+    border-color: #dfe7e1;
+  }
+  .video-agent-host button, .video-agent-host input,
+  .video-agent-host select, .video-agent-host textarea { font: inherit; }
+  .video-agent-host button { background: none; }
+}

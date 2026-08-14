@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 
-export function ChatComposer({ disabled, onSubmit }: { disabled: boolean; onSubmit: (message: string) => void }) {
-  const [value, setValue] = useState("");
+export function ChatComposer({ disabled, onSubmit, initialValue }: { disabled: boolean; onSubmit: (message: string) => void; initialValue?: string }) {
+  const [value, setValue] = useState(initialValue ?? "");
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();

@@ -1,5 +1,5 @@
 export default {
-  content: ["./src/video-agent/**/*.{ts,tsx}"],
+  content: ["./src/video-agent/**/*.{ts,tsx}", "./src/App.tsx"],
   corePlugins: { preflight: false },
   theme: {
     extend: {

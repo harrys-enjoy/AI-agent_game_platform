@@ -9,6 +9,7 @@ describe("VideoAgentPage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   it("submits a chat brief, creates a task, and shows it working then completed", async () => {
