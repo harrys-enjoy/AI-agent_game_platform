@@ -67,8 +67,14 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
     );
   }
 
+  const failureReason = task.status.message?.parts
+    .map((part) => part.text)
+    .filter(Boolean)
+    .join("\n");
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3" data-testid="canvas-error">
+      {failureReason && <p data-testid="canvas-error-reason">{failureReason}</p>}
       <p>{state === "TASK_STATE_CANCELED" ? "취소되었습니다." : "생성에 실패했습니다."}</p>
       <button type="button" onClick={onRetry} className="rounded bg-slate-900 px-3 py-2 text-sm text-white">
         다시 시도

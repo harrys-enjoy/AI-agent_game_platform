@@ -15,6 +15,7 @@ export function VideoAgentPage() {
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const { task, reconnecting, error, resumePolling } = useVideoTaskPolling(taskId);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function VideoAgentPage() {
   async function handleSubmit(message: string) {
     setSubmitError(null);
     setClarifyingQuestion(null);
+    setSubmitting(true);
     try {
       const response = await createVideoAgentTask(message);
       if ("task" in response) {
@@ -37,12 +39,18 @@ export function VideoAgentPage() {
       }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "요청 제출에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function handleCancel() {
     if (!taskId) return;
-    await cancelVideoAgentTask(taskId);
+    try {
+      await cancelVideoAgentTask(taskId);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "취소 요청에 실패했습니다.");
+    }
   }
 
   async function handleUploadScene(sceneId: string, file: File) {
@@ -70,8 +78,8 @@ export function VideoAgentPage() {
       <aside className="flex flex-col gap-3 rounded-lg bg-white p-4 shadow-sm">
         <h1 className="text-lg font-semibold">영상 생성</h1>
         <ComposerTabs
-          chat={<ChatComposer disabled={isBusy} onSubmit={handleSubmit} />}
-          form={<FormComposer disabled={isBusy} onSubmit={handleSubmit} />}
+          chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
+          form={<FormComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
         />
         {clarifyingQuestion && (
           <p className="rounded bg-amber-50 p-2 text-sm text-amber-800" data-testid="clarifying-question">

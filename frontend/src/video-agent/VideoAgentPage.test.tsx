@@ -87,4 +87,49 @@ describe("VideoAgentPage", () => {
 
     await waitFor(() => expect(screen.getByTestId("canvas-completed")).toHaveAttribute("src", "http://x/video.mp4"));
   });
+
+  it("shows an inline error when canceling a task fails", async () => {
+    vi.spyOn(api, "createVideoAgentTask").mockResolvedValue({
+      task: { id: "task_1", contextId: "ctx_1", status: { state: "TASK_STATE_WORKING" } },
+    });
+    vi.spyOn(api, "getVideoAgentTask").mockResolvedValue({
+      id: "task_1",
+      contextId: "ctx_1",
+      status: { state: "TASK_STATE_WORKING" },
+    });
+    vi.spyOn(api, "cancelVideoAgentTask").mockRejectedValue(new Error("video-agent task cancel failed: HTTP 400"));
+
+    render(<VideoAgentPage />);
+    await userEvent.type(screen.getByLabelText("영상 브리프"), "할로윈 이벤트 영상 15초");
+    await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "취소" })).toBeVisible());
+    await userEvent.click(screen.getByRole("button", { name: "취소" }));
+
+    await waitFor(() => expect(screen.getByTestId("submit-error")).toHaveTextContent("video-agent task cancel failed: HTTP 400"));
+  });
+
+  it("disables the composer immediately on submit, before the first poll response lands", async () => {
+    let resolveCreate: (value: Awaited<ReturnType<typeof api.createVideoAgentTask>>) => void = () => {};
+    vi.spyOn(api, "createVideoAgentTask").mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+    vi.spyOn(api, "getVideoAgentTask").mockResolvedValue({
+      id: "task_1",
+      contextId: "ctx_1",
+      status: { state: "TASK_STATE_WORKING" },
+    });
+
+    render(<VideoAgentPage />);
+    await userEvent.type(screen.getByLabelText("영상 브리프"), "할로윈 이벤트 영상 15초");
+    const submitButton = screen.getByRole("button", { name: "생성 요청" });
+    await userEvent.click(submitButton);
+
+    expect(submitButton).toBeDisabled();
+
+    resolveCreate({ task: { id: "task_1", contextId: "ctx_1", status: { state: "TASK_STATE_WORKING" } } });
+    await waitFor(() => expect(screen.getByTestId("canvas-working")).toBeVisible());
+  });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TaskCanvas } from "./TaskCanvas";
@@ -52,5 +52,23 @@ describe("TaskCanvas", () => {
     expect(screen.getByTestId("canvas-error")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(onRetry).toHaveBeenCalled();
+  });
+
+  it("shows the specific failure reason from status.message when present for FAILED", () => {
+    const task: Task = {
+      id: "t1",
+      contextId: "c1",
+      status: {
+        state: "TASK_STATE_FAILED",
+        message: { parts: [{ text: "예산 초과로 렌더링이 중단되었습니다." }] },
+      },
+    };
+    const { container } = render(
+      <TaskCanvas task={task} unresolvedScenes={[]} onUploadScene={vi.fn()} onRetry={vi.fn()} />,
+    );
+    const scoped = within(container);
+
+    expect(scoped.getByTestId("canvas-error-reason")).toHaveTextContent("예산 초과로 렌더링이 중단되었습니다.");
+    expect(scoped.getByText("생성에 실패했습니다.")).toBeVisible();
   });
 });
