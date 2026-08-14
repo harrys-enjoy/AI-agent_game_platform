@@ -52,4 +52,29 @@ describe("composeStructuredBrief", () => {
     expect(sentence.match(DURATION_RE)).toBeNull();
     expect(sentence.match(BUDGET_RE)).toBeNull();
   });
+
+  it("extracts structured durationSec, not substring from brief text", () => {
+    const sentence = composeStructuredBrief({
+      brief: "30초 정도 홍보 영상 부탁해요",
+      durationSec: 60,
+    });
+    const match = sentence.match(DURATION_RE);
+    expect(match?.[1]).toBe("60");
+  });
+
+  it("rounds non-integer durationSec before encoding", () => {
+    const sentence = composeStructuredBrief({ brief: "테스트", durationSec: 15.5 });
+    const match = sentence.match(DURATION_RE);
+    expect(match?.[1]).toBe("16");
+  });
+
+  it("includes zero values for durationSec and maxBudgetUsd", () => {
+    const sentence = composeStructuredBrief({
+      brief: "테스트",
+      durationSec: 0,
+      maxBudgetUsd: 0,
+    });
+    expect(sentence.match(DURATION_RE)?.[1]).toBe("0");
+    expect(sentence.match(BUDGET_RE)?.[1]).toBe("0");
+  });
 });

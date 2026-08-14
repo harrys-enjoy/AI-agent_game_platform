@@ -7,10 +7,11 @@ export type StructuredBriefFields = {
 };
 
 export function composeStructuredBrief(fields: StructuredBriefFields): string {
-  const parts = [fields.brief.trim()];
-  if (fields.durationSec) parts.push(`${fields.durationSec}초로`);
+  const parts: string[] = [];
+  if (fields.durationSec !== undefined) parts.push(`${Math.round(fields.durationSec)}초로`);
   if (fields.preset) parts.push(`${fields.preset} 프리셋`);
   if (fields.sceneType) parts.push(`${fields.sceneType} 씬으로`);
-  if (fields.maxBudgetUsd) parts.push(`예산 ${fields.maxBudgetUsd}달러로`);
+  if (fields.maxBudgetUsd !== undefined) parts.push(`예산 ${fields.maxBudgetUsd}달러로`);
+  parts.push(fields.brief.trim());
   return `${parts.join(", ")} 만들어줘`;
 }
