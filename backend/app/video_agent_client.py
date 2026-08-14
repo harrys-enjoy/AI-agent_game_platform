@@ -16,17 +16,23 @@ def _headers(registry: AgentRegistry) -> dict[str, str]:
 
 
 async def _call(url: str, method: Literal["post", "get"], *, headers: dict[str, str], json: dict | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        if method == "post":
-            response = await client.post(url, json=json, headers=headers)
-        else:
-            response = await client.get(url, headers=headers)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if method == "post":
+                response = await client.post(url, json=json, headers=headers)
+            else:
+                response = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"video-agent unreachable: {exc}") from exc
     if response.is_error:
         try:
             raise A2AError.from_payload(response.json(), response.status_code)
         except ValueError:
             raise RuntimeError(f"video-agent HTTP {response.status_code}: {response.text}") from None
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError:
+        raise RuntimeError(f"video-agent returned a non-JSON response: {response.text}") from None
     if not isinstance(payload, dict):
         raise RuntimeError("video-agent returned an unexpected response shape")
     return payload

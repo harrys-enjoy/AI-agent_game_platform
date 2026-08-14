@@ -120,7 +120,7 @@ async def test_send_message_raises_runtime_error_when_unreachable(monkeypatch):
         raise httpx.ConnectError("Connection refused", request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(RuntimeError, match="unreachable"):
         await send_message(_registry(), "브리프")
 
 
@@ -132,3 +132,13 @@ async def test_get_task_raises_runtime_error_on_non_json_body(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     with pytest.raises(RuntimeError, match="video-agent HTTP 500"):
         await get_task(_registry(), "task_1")
+
+
+@pytest.mark.asyncio
+async def test_send_message_raises_runtime_error_on_non_json_200_response(monkeypatch):
+    async def fake_post(self, url, *, json=None, headers=None):
+        return httpx.Response(200, text="not json", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    with pytest.raises(RuntimeError, match="non-JSON response"):
+        await send_message(_registry(), "브리프")
