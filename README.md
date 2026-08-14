@@ -134,6 +134,31 @@ GET /api/tasks/{task_id}
 
 Main은 `queued`, `running`, `succeeded`, `failed`, `cancelled` 상태를 관리하며, Agent가 완료 Task를 반환하는 경우 Task URL을 polling합니다.
 
+## Video Agent Task API
+
+video-agent 전용 A2A Task Proxy Route입니다.
+
+```http
+POST /api/video-agent/tasks
+GET  /api/video-agent/tasks/{task_id}
+POST /api/video-agent/tasks/{task_id}/cancel
+```
+
+`POST /api/video-agent/tasks`는 video-agent의 `message:send`를 호출해 Task를 생성하거나(모호한 요청이면 명확화 질문을 반환), 나머지 두 Route는 각각 Task 상태 조회와 취소를 video-agent에 그대로 proxy합니다.
+
+Video Agent Frontend는 `frontend/video-agent.html`을 별도 Vite Entry로 제공합니다. 아직 메인 앱 Sidebar에는 연결되어 있지 않으며(추후 작업), `npm run dev` 실행 중에는 `/video-agent.html`에서 확인할 수 있습니다.
+
+Frontend 테스트:
+
+```bash
+cd frontend && npm run test:video-agent
+```
+
+교차 저장소 수동 Smoke Test(`scripts/video_agent_smoke_test.sh`)는 다음이 필요합니다.
+
+- `video_draft_pipeline` 저장소가 형제 디렉터리로 checkout되어 있어야 합니다(기본 경로 `../proj`, 인자로 override 가능).
+- `ffmpeg`가 PATH에 있어야 합니다.
+
 ## Catalog 게임 Q&A 연동
 
 게임 Q&A는 기존 Catalog Endpoint를 예외 계약으로 사용합니다.

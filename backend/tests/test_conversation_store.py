@@ -1,4 +1,4 @@
-from backend.app.conversation_store import ConversationStore
+from app.conversation_store import ConversationStore
 
 
 def test_messages_are_isolated_by_agent_and_persist_after_reopen(tmp_path):

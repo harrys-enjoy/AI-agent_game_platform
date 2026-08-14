@@ -17,6 +17,7 @@ from .orchestrator import Orchestrator
 from .registry import AgentRegistry
 from .router import RouterLLM
 from .task_store import TaskStore
+from . import video_agent_client
 
 
 app = FastAPI(title="Main AI Orchestrator")
@@ -76,6 +77,10 @@ class StoryDraftRequest(StoryCreateRequest):
 class StoryApproveRequest(BaseModel):
     reviewId: str
     draft: StoryDraftRequest
+
+
+class VideoAgentTaskRequest(BaseModel):
+    message: str
 
 
 class LocalClient:
@@ -430,3 +435,33 @@ async def resume_video_scene(task_id: str, scene_id: str, file: UploadFile = Fil
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return response.json()
+
+
+@app.post("/api/video-agent/tasks")
+async def create_video_agent_task(payload: VideoAgentTaskRequest) -> dict:
+    try:
+        return await video_agent_client.send_message(registry, payload.message)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/video-agent/tasks/{task_id}")
+async def get_video_agent_task(task_id: str) -> dict:
+    try:
+        return await video_agent_client.get_task(registry, task_id)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/video-agent/tasks/{task_id}/cancel")
+async def cancel_video_agent_task(task_id: str) -> dict:
+    try:
+        return await video_agent_client.cancel_task(registry, task_id)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
