@@ -1,4 +1,5 @@
 // frontend/src/video-agent/VideoAgentPage.tsx
+import "./styles.css";
 import { useEffect, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ComposerTabs } from "./ComposerTabs";
