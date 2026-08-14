@@ -27,6 +27,7 @@ export function useVideoTaskPolling(taskId: string | null): PollingState {
       setError(null);
       return;
     }
+    failureCountRef.current = 0;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 

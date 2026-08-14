@@ -83,4 +83,24 @@ describe("useVideoTaskPolling", () => {
     });
     await waitFor(() => expect(result.current.error).toBe("network down"));
   });
+
+  it("resets failure count when taskId changes", async () => {
+    const spy = vi.spyOn(api, "getVideoAgentTask").mockRejectedValue(new Error("network down"));
+    const { result, rerender } = renderHook(({ taskId }) => useVideoTaskPolling(taskId), {
+      initialProps: { taskId: "task-a" },
+    });
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    expect(result.current.reconnecting).toBe(true);
+    expect(result.current.error).toBeNull();
+
+    rerender({ taskId: "task-b" });
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+    expect(result.current.reconnecting).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
 });
