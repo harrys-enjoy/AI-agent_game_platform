@@ -1,6 +1,7 @@
+import json
 import os
 import re
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
@@ -49,6 +50,10 @@ class ChatMessageRequest(BaseModel):
 
 class ChatReplyRequest(BaseModel):
     content: str
+
+
+class VideoPromptHandoffRequest(BaseModel):
+    art_prompt: dict[str, Any]
 
 
 class RouteRequest(BaseModel):
@@ -114,6 +119,10 @@ GAME_QNA_COMMANDS = {
         "template": "도감에서 관련 캐릭터, 몬스터, 아이템을 찾아줘.",
     },
 }
+GAME_QNA_COMMANDS["/story-review"] = {
+    "mode": "story-review",
+    "template": "RPG 스토리 초안을 Story Review Workspace에서 검토해줘.",
+}
 
 
 GAME_QNA_SOURCE_LABELS = {
@@ -126,9 +135,18 @@ GAME_QNA_SOURCE_LABELS = {
 
 def parse_game_qna_command(content: str) -> dict:
     text = content.strip()
+    video_alias = re.fullmatch(r"/\?\s+video(?:\s+(.*))?", text, re.IGNORECASE)
+    if video_alias:
+        config = GAME_QNA_COMMANDS["/art"]
+        return {
+            "kind": "request",
+            "mode": config["mode"],
+            "content": (video_alias.group(1) or "").strip() or config["template"],
+            "command": "/art",
+        }
     if re.fullmatch(r"/(?:\?|help)", text, re.IGNORECASE):
         return {"kind": "help", "commands": list(GAME_QNA_COMMANDS)}
-    match = re.fullmatch(r"/(planning|art|lore|catalog|codexbook)(?:\s+(.*))?", text, re.IGNORECASE)
+    match = re.fullmatch(r"/(planning|art|lore|catalog|codexbook|story-review)(?:\s+(.*))?", text, re.IGNORECASE)
     if not match:
         return {"kind": "request", "mode": "lore", "content": text, "command": None}
     command = f"/{match.group(1).lower()}"
@@ -139,6 +157,18 @@ def parse_game_qna_command(content: str) -> dict:
         "content": (match.group(2) or "").strip() or config["template"],
         "command": command,
     }
+
+
+def game_qna_agent_message(command: dict) -> str:
+    if command.get("command") == "/art":
+        return f"/art {command['content']}"
+    return command["content"]
+
+
+def build_video_handoff_request(art_prompt: dict[str, Any]) -> dict:
+    request = build_agent_request("video-agent", json.dumps(art_prompt, ensure_ascii=False))
+    request["context"] = {"source": "game-qna", "format": "art_prompt_json"}
+    return request
 
 
 def resolve_chat_agent_fallback(agent_name: str, content: str) -> str:
@@ -176,6 +206,24 @@ registry = AgentRegistry.from_environment(os.environ)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/game-qna/art-prompts/send-to-video")
+async def send_art_prompt_to_video(payload: VideoPromptHandoffRequest) -> dict:
+    configured_card = next(card for card in cards if card.name == "video-agent")
+    live_cards = await registry.refresh() if os.getenv("LIVE_AGENT_DISCOVERY", "false").lower() == "true" else {}
+    card = live_cards.get("video-agent", configured_card)
+    try:
+        result = await A2AClient().send_message(
+            card.url,
+            build_video_handoff_request(payload.art_prompt),
+            headers=registry.headers("video-agent"),
+        )
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"status": result.get("status", "succeeded"), "answer": result.get("answer") or result.get("summary", ""), "agent": "video-agent"}
 
 
 @app.get("/api/agents")
@@ -219,7 +267,7 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     command = parse_game_qna_command(payload.content) if card_name == "game-qna-agent" else None
     if command and command["kind"] == "help":
         return {"answer": "사용 가능한 Game Q&A 명령어: " + ", ".join(command["commands"]), "agent": card_name, "status": "succeeded"}
-    request = build_agent_request(card_name, command["content"] if command else payload.content)
+    request = build_agent_request(card_name, game_qna_agent_message(command) if command else payload.content)
     if card_name == "game-qna-agent":
         request["mode"] = command["mode"] if command else "lore"
     try:
@@ -232,7 +280,7 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
                 card_name = replacement
                 card = replacement_card
                 command = parse_game_qna_command(payload.content) if card_name == "game-qna-agent" else None
-                request = build_agent_request(card_name, command["content"] if command else payload.content)
+                request = build_agent_request(card_name, game_qna_agent_message(command) if command else payload.content)
                 if card_name == "game-qna-agent":
                     request["mode"] = command["mode"] if command else "lore"
                 result = await client.send_message(card.url, request, headers=registry.headers(card_name))

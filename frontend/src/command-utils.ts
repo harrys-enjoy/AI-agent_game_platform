@@ -2,7 +2,7 @@ export type ChatCommand = {
   command: string;
   label: string;
   description: string;
-  mode: "dev-guide" | "lore" | "catalog" | "codex";
+  mode: "dev-guide" | "lore" | "catalog" | "codex" | "story-review";
   template: string;
 };
 
@@ -44,16 +44,34 @@ export const commandCatalog: ChatCommand[] = [
   },
 ];
 
+commandCatalog.push({ command: "/story-review", label: "Story Review", description: "RPG 스토리의 설정 충돌과 개선점을 검토", mode: "story-review", template: "검토할 RPG 스토리 초안을 입력해 주세요." });
+
 export type ResolvedChatCommand =
   | { kind: "help"; commands: ChatCommand[] }
   | { kind: "request"; mode: ChatCommand["mode"]; content: string; command: string | null };
 
+export function getCommandInputValue(command: string): string {
+  return `${command} `;
+}
+
 export function resolveChatCommand(input: string): ResolvedChatCommand {
   const content = input.trim();
+  const videoAlias = content.match(/^\/\?\s+video(?:\s+(.*))?$/i);
+  if (videoAlias) {
+    const artCommand = commandCatalog.find((entry) => entry.command === "/art");
+    if (artCommand) {
+      return {
+        kind: "request",
+        mode: artCommand.mode,
+        content: videoAlias[1]?.trim() || artCommand.template,
+        command: "/art",
+      };
+    }
+  }
   if (/^\/(?:\?|help)\s*$/i.test(content)) {
     return { kind: "help", commands: commandCatalog };
   }
-  const match = content.match(/^\/(planning|art|lore|catalog|codexbook)(?:\s+(.*))?$/i);
+  const match = content.match(/^\/(planning|art|lore|catalog|codexbook|story-review)(?:\s+(.*))?$/i);
   if (!match) {
     return { kind: "request", mode: "lore", content, command: null };
   }

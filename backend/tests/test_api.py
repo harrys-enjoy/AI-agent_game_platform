@@ -4,7 +4,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.main import parse_game_qna_command
+from app.main import build_video_handoff_request, game_qna_agent_message, parse_game_qna_command
 
 
 def test_agents_and_task_api():
@@ -28,16 +28,41 @@ def test_game_qna_commands_resolve_to_catalog_modes():
     }
     assert parse_game_qna_command("/art") ["mode"] == "dev-guide"
     assert "Video Generation" in parse_game_qna_command("/art")["content"]
+    assert parse_game_qna_command("/? video 캐릭터 등장 장면 프롬프트") == {
+        "kind": "request",
+        "mode": "dev-guide",
+        "content": "캐릭터 등장 장면 프롬프트",
+        "command": "/art",
+    }
     assert parse_game_qna_command("/lore 전우치의 관계") ["mode"] == "lore"
     assert parse_game_qna_command("/catalog 마을") ["mode"] == "catalog"
     assert parse_game_qna_command("/codexbook 루멘") ["mode"] == "codex"
     assert parse_game_qna_command("/codexbook 루멘") ["command"] == "/codexbook"
+    assert parse_game_qna_command("/story-review 기억의 문") == {
+        "kind": "request",
+        "mode": "story-review",
+        "content": "기억의 문",
+        "command": "/story-review",
+    }
 
 
 def test_game_qna_help_command_is_resolved_without_agent_call():
     result = parse_game_qna_command("/?")
     assert result["kind"] == "help"
     assert "/planning" in result["commands"]
+
+
+def test_art_command_keeps_its_prompt_guide_marker_for_game_qna_agent():
+    command = parse_game_qna_command("/art 홍길동")
+
+    assert game_qna_agent_message(command) == "/art 홍길동"
+
+
+def test_video_handoff_keeps_the_original_art_prompt_as_json_message():
+    request = build_video_handoff_request({"story": "연화의 선택", "character": "연화"})
+
+    assert request["message"] == '{"story": "연화의 선택", "character": "연화"}'
+    assert request["context"] == {"source": "game-qna", "format": "art_prompt_json"}
 
 
 def test_frontend_origin_can_call_api():

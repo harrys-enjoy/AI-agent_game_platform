@@ -4,7 +4,8 @@ import "./chat-answer.css";
 import { selectMenu } from "./menu-utils";
 import { createChatReply, createTask, createTaskProposal, getTaskAction, mapTaskStatus, pollTask, shouldApplyChatResponse, updateTask } from "./task-utils";
 import "./task-form.css";
-import { commandCatalog, resolveChatCommand } from "./command-utils";
+import { commandCatalog, getCommandInputValue, resolveChatCommand } from "./command-utils";
+import { extractArtPrompt, formatArtPromptForChat, type ArtPrompt } from "./art-prompt-utils";
 import { scrollChatToBottom } from "./chat-scroll";
 import { buildStoryDraft, canApproveStory, reviewLabel, type StoryDraft, type StoryReview } from "./story-review-utils";
 import { buildResumeFormData, buildUnresolvedScenes, finalVideoMessageText, markSceneStatus, mergeResumeResult, type RawUnresolvedScene, type ResumeResult, type UnresolvedScene } from "./resume-utils";
@@ -13,10 +14,13 @@ import { PoliciesPanel, QuickActions, ReferenceBriefingPanel, ReportPanel, TaskQ
 import { AssigneeAssignments, assigneeOptions, defaultAssignments, findAssignee } from "./assignee";
 import { AssigneeSwitcher } from "./AssigneeSwitcher";
 import { routeAgentRequest } from "./agent-routing";
+import GameQnaSummary from "./GameQnaSummary";
+import { normalizeAgentWorkTasks, syncGameQnaStoryReviewTask } from "./chat-task-utils";
+import { createRecentGameQnaWork, upsertRecentGameQnaWork, type RecentGameQnaWork } from "./game-qna-summary-utils";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
-type ChatTask = { id: string; chat: string; title: string; status: "working" | "done"; hidden: boolean };
+type ChatTask = { id: string; chat: string; title: string; status: "working" | "done" | "error"; hidden: boolean };
 type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] };
 type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string };
 const sections = ["Home", "Policies"];
@@ -41,7 +45,10 @@ export default function App() {
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [worksOpen, setWorksOpen] = useState(true);
   const [aiChatsOpen, setAiChatsOpen] = useState(false);
-  const [chatTasks, setChatTasks] = useState<ChatTask[]>(() => { try { return JSON.parse(window.localStorage.getItem("ai-chat-tasks") ?? "[]") as ChatTask[]; } catch { return []; } });
+  const [chatTasks, setChatTasks] = useState<ChatTask[]>(() => { try { return normalizeAgentWorkTasks(JSON.parse(window.localStorage.getItem("ai-chat-tasks") ?? "[]") as ChatTask[]); } catch { return []; } });
+  const [recentGameQnaWorks, setRecentGameQnaWorks] = useState<RecentGameQnaWork[]>(() => { try { const saved = JSON.parse(window.localStorage.getItem("game-qna-recent-work") ?? "[]") as RecentGameQnaWork | RecentGameQnaWork[]; return Array.isArray(saved) ? saved.slice(0, 3) : saved ? [saved] : []; } catch { return []; } });
+  const [pendingArtPrompt, setPendingArtPrompt] = useState<ArtPrompt | null>(() => { try { return JSON.parse(window.localStorage.getItem("game-qna-art-prompt") ?? "null") as ArtPrompt | null; } catch { return null; } });
+  const [artPromptTransferStatus, setArtPromptTransferStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [assigneeName, setAssigneeName] = useState(() => window.localStorage.getItem("main-assignee") ?? assigneeOptions[0].name);
   const [assignments, setAssignments] = useState<AssigneeAssignments>(() => { try { return { ...defaultAssignments, ...JSON.parse(window.localStorage.getItem("assignee-assignments") ?? "{}") }; } catch { return defaultAssignments; } });
   const [uiVariant, setUiVariant] = useState<UiVariant>(() => readUiVariant(window.localStorage.getItem("main-ui-variant")));
@@ -60,10 +67,44 @@ export default function App() {
   const [isReviewingStory, setIsReviewingStory] = useState(false);
   const [showCommandHelp, setShowCommandHelp] = useState(false);
   const currentChat = activeChat ?? "Workmate AI";
+  const recentGameQnaWork = recentGameQnaWorks;
   const currentAssignee = findAssignee(assigneeName);
   const currentSessionId = chatSessions[currentChat];
   const activeChatRef = useRef(currentChat);
   const messagesRef = useRef<HTMLDivElement>(null);
+
+  function recordGameQnaWork(request: string, status = "완료") {
+    const work = createRecentGameQnaWork(request, status);
+    setRecentGameQnaWorks((items) => {
+      const next = upsertRecentGameQnaWork(items, work);
+      window.localStorage.setItem("game-qna-recent-work", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  async function sendArtPromptToVideo() {
+    let artPromptToSend = pendingArtPrompt;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem("game-qna-art-prompt") ?? "null");
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) artPromptToSend = stored as ArtPrompt;
+    } catch {
+      // Keep the last valid in-memory prompt when local storage was manually corrupted.
+    }
+    if (!artPromptToSend || artPromptTransferStatus === "sending") return;
+    setArtPromptTransferStatus("sending");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/game-qna/art-prompts/send-to-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ art_prompt: artPromptToSend }),
+      });
+      if (!response.ok) throw new Error("Video Agent handoff failed");
+      setArtPromptTransferStatus("sent");
+      recordGameQnaWork("/art video handoff", "전송 완료");
+    } catch {
+      setArtPromptTransferStatus("error");
+    }
+  }
 
   useEffect(() => {
     scrollChatToBottom(messagesRef.current);
@@ -84,12 +125,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function handleStoryReviewState(event: Event) {
+      const state = (event as CustomEvent<{ status?: "working" | "done" | "error" }>).detail?.status;
+      if (!state) return;
+      recordGameQnaWork("/story-review", state === "working" ? "검토 중" : state === "done" ? "검토 완료" : "오류");
+      setAiChatsOpen(true);
+      setChatTasks((items) => {
+        const next = syncGameQnaStoryReviewTask(items, state, `game-qna-${Date.now()}`);
+        window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next));
+        return next;
+      });
+    }
+    window.addEventListener("game-qna-story-review-state", handleStoryReviewState);
+    return () => window.removeEventListener("game-qna-story-review-state", handleStoryReviewState);
+  }, []);
+
+  useEffect(() => {
     activeChatRef.current = currentChat;
     let cancelled = false;
     setChat([]);
     fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/session`)
       .then((response) => response.ok ? response.json() as Promise<{ session_id: string; messages: StoredMessage[] }> : Promise.reject(new Error("Chat history failed")))
-      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentChat]: session.session_id })); setChat(session.messages.map((item) => ({ id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : item.content }))); } })
+      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentChat]: session.session_id })); setChat(session.messages.map((item) => { const prompt = currentChat === "Game Q&A" && item.role === "assistant" ? extractArtPrompt(item.content) : null; return { id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : prompt ? formatArtPromptForChat(prompt) : item.content }; })); } })
       .catch(() => { if (!cancelled) setChat([]); });
     return () => { cancelled = true; };
   }, [currentChat]);
@@ -242,21 +299,33 @@ export default function App() {
   function selectGameQaCommand(command: string) {
     const resolved = resolveChatCommand(command);
     if (resolved.kind !== "request") return;
-    setMessage(`${resolved.command} ${resolved.content}`);
+    setMessage(getCommandInputValue(resolved.command ?? command));
     setShowCommandHelp(false);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!message.trim()) return;
     const request = message.trim(); setMessage("");
+    const gameQnaCommand = currentChat === "Game Q&A" ? resolveChatCommand(request) : null;
     if (currentChat === "Game Q&A") {
-      const resolved = resolveChatCommand(request);
-      if (resolved.kind === "help") {
+      if (gameQnaCommand?.kind === "help") {
         setShowCommandHelp(true);
         return;
       }
+      const storyReviewMatch = request.match(/^(?:스토리\s*검토(?:해줘|해 줘)?|\/story-review)(?:\s+([\s\S]+))?$/i);
+      if (storyReviewMatch) {
+        const draftContent = storyReviewMatch[1]?.trim() ?? "";
+        recordGameQnaWork(request, "검토 대기");
+        window.dispatchEvent(new CustomEvent("game-qna-story-review", { detail: { content: draftContent } }));
+        setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }, { id: `review-${Date.now()}`, kind: "text", text: "Story Review Workspace로 이동했습니다. 초안을 입력하고 검토를 실행하세요." }]);
+        persistMessage("user", request);
+        persistMessage("assistant", "Story Review Workspace로 이동했습니다. 초안을 입력하고 검토를 실행하세요.");
+        return;
+      }
     }
-    const requestedAgent = routeAgentRequest(request);
+    const requestedAgent = gameQnaCommand?.kind === "request" && gameQnaCommand.command
+      ? null
+      : routeAgentRequest(request);
     if (requestedAgent && requestedAgent !== currentChat) {
       activateChatTask(requestedAgent);
       activeChatRef.current = requestedAgent;
@@ -268,6 +337,7 @@ export default function App() {
     const responseChat = activeSection === "Today Briefing" && !activeChat ? routeBriefingRequest(request) : currentChat;
     if (responseChat !== currentChat) { activeChatRef.current = responseChat; setActiveSection("Home"); setActiveChat(responseChat); }
     startChatTask(responseChat);
+    if (responseChat === "Game Q&A") recordGameQnaWork(request, "진행 중");
     setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }]);
     persistMessage("user", request);
     if (getTaskAction(request) === "confirm") {
@@ -295,7 +365,14 @@ export default function App() {
         throw new Error(detail);
       }
       const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[] };
-      const reply = data.answer || createChatReply(request);
+      const rawReply = data.answer || createChatReply(request);
+      const artPrompt = responseChat === "Game Q&A" ? extractArtPrompt(rawReply) : null;
+      const reply = artPrompt ? formatArtPromptForChat(artPrompt) : rawReply;
+      if (artPrompt) {
+        setPendingArtPrompt(artPrompt);
+        setArtPromptTransferStatus("idle");
+        window.localStorage.setItem("game-qna-art-prompt", JSON.stringify(artPrompt));
+      }
       persistMessage("assistant", reply);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       const textMessage: ChatMessage = { id: `response-${Date.now()}`, kind: "text", text: reply };
@@ -305,12 +382,14 @@ export default function App() {
         setChat((items) => [...items, textMessage]);
       }
       completeChatTask(responseChat);
+      if (responseChat === "Game Q&A") recordGameQnaWork(request, "완료");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown agent error";
       const reply = `Main Agent 오류: ${detail}`;
       persistMessage("assistant", reply);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       setChat((items) => [...items, { id: `error-${Date.now()}`, kind: "text", text: reply }]);
+      if (responseChat === "Game Q&A") recordGameQnaWork(request, "오류");
     }
   }
 
@@ -339,7 +418,7 @@ export default function App() {
   return <div className={`shell ${uiVariant === "updated" ? "updated-ui" : "legacy-ui"} ${activeChat ? "chat-active agent-content-updated" : "section-active"}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant={uiVariant} activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant={agentContentVariant} currentChat={activeChat} onSelect={selectQuickAction} />{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
     <div className="variant-switcher" role="group" aria-label="UI version"><span>UI</span><button className={uiVariant === "legacy" ? "selected" : ""} type="button" onClick={() => changeUiVariant("legacy")}>변경 전</button><button className={uiVariant === "updated" ? "selected" : ""} type="button" onClick={() => changeUiVariant("updated")}>변경 후</button></div>
     <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{(uiVariant === "legacy" ? legacySections : sections).map((item) => <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item === "Today Briefing" ? "오늘 브리핑" : item === "Weekly Report" ? "주간 업무보고" : item}</button>)}{uiVariant === "legacy" ? <><button className="nav works-toggle" type="button" aria-expanded={worksOpen} onClick={() => setWorksOpen((open) => !open)}>◇ Works <span>{worksOpen ? "▾" : "▸"}</span></button>{worksOpen && <div className="nested-links">{chats.map((item) => <button className={`nested-link ${activeChat === item ? "active" : ""}`} type="button" onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</div>}<hr /><button className="section-toggle" type="button" aria-expanded={aiChatsOpen} onClick={() => setAiChatsOpen((open) => !open)}><small>Agent Work</small><span>{aiChatsOpen ? "▾" : "▸"}</span></button>{aiChatsOpen && <div className="nested-links task-links">{chatTasks.filter((task) => !task.hidden).map((task) => <div className="nested-task-row" key={task.id}><button className="nested-task" type="button" onClick={() => handleChatClick(task.chat)}><span className={task.status === "working" ? "task-working-dot" : "task-done-space"}>{task.status === "working" ? "○" : ""}</span>{task.title}</button><button className="nested-task-delete" type="button" aria-label={`${task.title} 삭제`} onClick={() => hideChatTask(task.id)}>×</button></div>)}</div>}</> : <><hr /><small>Agent Work</small>{chats.map((item) => <button className={`chat-link ${activeChat === item ? "active" : ""}`} type="button" aria-pressed={activeChat === item} onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</>}<AssigneeSwitcher name={assigneeName} onChange={changeAssignee} assignments={assignments} onSaveAssignments={saveAssignments} /></aside>
-    <main className="workspace"><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>PROJECT_DEMO</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel /></main>
+    <main className="workspace"><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>PROJECT_DEMO</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel recentGameQnaWork={recentGameQnaWork} artPrompt={pendingArtPrompt} artPromptTransferStatus={artPromptTransferStatus} onSendArtPromptToVideo={() => void sendArtPromptToVideo()} /></main>
     <aside className="chat-panel"><h3>AI Chat · {currentChat}<button className="reset-chat" type="button" onClick={() => void resetChat()}>Reset chat</button>{currentChat === "Game Q&A" && <button className="story-toggle" type="button" onClick={() => setIsStoryFormOpen((value) => !value)}>{isStoryFormOpen ? "Close" : "+ Add story"}</button>}</h3>{currentChat === "Game Q&A" && isStoryFormOpen && <form className="story-form" onSubmit={addStory}><input value={storyName} onChange={(event) => setStoryName(event.target.value)} placeholder="Story title" required /><input value={storyKeywords} onChange={(event) => setStoryKeywords(event.target.value)} placeholder="Keywords, comma separated" required /><textarea value={storyAnswer} onChange={(event) => setStoryAnswer(event.target.value)} placeholder="Story content" rows={5} required /><button type="submit">Save story</button>{storyNotice && <small>{storyNotice}</small>}</form>}{currentChat === "Game Q&A" && showCommandHelp && <div className="command-help" role="dialog" aria-label="Game Q&A commands"><div className="command-help-heading"><strong>Game Q&A 명령어</strong><button type="button" className="command-help-close" onClick={() => setShowCommandHelp(false)}>닫기</button></div>{commandCatalog.map((item) => <button type="button" className="command-item" key={item.command} onClick={() => selectGameQaCommand(item.command)}><strong>{item.command}</strong><span>{item.label} · {item.description}</span></button>)}</div>}<div className="messages" ref={messagesRef}>{chat.length ? chat.map(renderChatMessage) : <div className="empty">Type a message to start a conversation</div>}</div><form className="composer" onSubmit={submit}><input value={message} onChange={(event) => { setMessage(event.target.value); if (currentChat === "Game Q&A" && (event.target.value === "/" || event.target.value.startsWith("/?") || event.target.value.startsWith("/help"))) setShowCommandHelp(true); }} onKeyDown={(event) => { if (event.key === "Escape") setShowCommandHelp(false); }} placeholder={currentChat === "Game Q&A" ? "Type /? for Game Q&A commands..." : "Type a message..."} /><button type="submit">➤</button></form></aside>
   </div>;
 }
