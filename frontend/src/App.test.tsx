@@ -37,4 +37,13 @@ describe("App - Video Generation sidebar entry", () => {
     expect(await screen.findByPlaceholderText("Type a message...")).toBeInTheDocument();
     expect(screen.queryByLabelText("영상 브리프")).not.toBeInTheDocument();
   });
+
+  it("shows the scoped routing chatbot instead of the default one when Video Generation is selected", async () => {
+    render(<App />);
+
+    await userEvent.click(screen.getByText("Video Generation"));
+
+    expect(await screen.findByPlaceholderText("다른 업무나 질문을 입력하세요")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("무엇을 도와드릴까요?")).not.toBeInTheDocument();
+  });
 });

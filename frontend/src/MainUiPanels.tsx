@@ -102,7 +102,7 @@ export function ReportPanel({ kind }: { kind: "briefing" | "weekly" }) {
 }
 
 export function UpdatedReportNav({ variant, activeSection, activeChat, onSelect }: { variant: UiVariant; activeSection: string; activeChat: string | null; onSelect: (section: string) => void }) {
-  return <>{variant === "updated" && <div className="updated-report-nav" aria-label="업무 보고 메뉴"><button className={activeSection === "Today Briefing" ? "active" : ""} type="button" onClick={() => onSelect("Today Briefing")}>◇ 오늘 브리핑</button><button className={activeSection === "Weekly Report" ? "active" : ""} type="button" onClick={() => onSelect("Weekly Report")}>◇ 주간 업무 보고</button></div>}{activeSection === "Today Briefing" && !activeChat && <MainBriefingChatbot />}</>;
+  return <>{variant === "updated" && <div className="updated-report-nav" aria-label="업무 보고 메뉴"><button className={activeSection === "Today Briefing" ? "active" : ""} type="button" onClick={() => onSelect("Today Briefing")}>◇ 오늘 브리핑</button><button className={activeSection === "Weekly Report" ? "active" : ""} type="button" onClick={() => onSelect("Weekly Report")}>◇ 주간 업무 보고</button></div>}{activeSection === "Today Briefing" && !activeChat && <MainBriefingChatbot />}{activeChat === "Video Generation" && <MainBriefingChatbot contextHint="다른 업무나 질문은 여기에 입력하세요. 영상 제작 요청은 왼쪽 채팅창을 이용해주세요." />}</>;
 }
 
 
