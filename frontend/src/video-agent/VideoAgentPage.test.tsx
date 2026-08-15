@@ -133,4 +133,18 @@ describe("VideoAgentPage", () => {
     resolveCreate({ task: { id: "task_1", contextId: "ctx_1", status: { state: "TASK_STATE_WORKING" } } });
     await waitFor(() => expect(screen.getByTestId("canvas-working")).toBeVisible());
   });
+
+  it("shows the Main Agent page title above the two-panel layout", () => {
+    render(<VideoAgentPage />);
+    expect(screen.getByText("MAIN AGENT / VIDEO GENERATION")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "영상 생성" })).toBeInTheDocument();
+  });
+
+  it("does not stretch the two-panel layout to the full viewport height", () => {
+    const { container } = render(<VideoAgentPage />);
+    const grid = container.querySelector(".grid");
+    expect(grid).not.toHaveClass("h-full");
+    expect(container.querySelector("aside")).toHaveClass("min-h-[520px]");
+    expect(container.querySelector("main")).toHaveClass("min-h-[520px]");
+  });
 });
