@@ -24,6 +24,7 @@ describe("App - Video Generation sidebar entry", () => {
 
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
+    expect(screen.queryByText("Type a message to start a conversation")).not.toBeInTheDocument();
   });
 
   it("restores the generic chat panel when switching away from Video Generation", async () => {
