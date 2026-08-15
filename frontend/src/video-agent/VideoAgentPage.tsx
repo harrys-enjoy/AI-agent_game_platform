@@ -96,7 +96,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
           <h1>영상 생성</h1>
         </div>
       </div>
-      <div className="grid grid-cols-[minmax(280px,360px)_1fr] gap-4 bg-brief-bg">
+      <div className="grid grid-cols-[minmax(280px,360px)_1fr] gap-4">
         <aside className="flex min-h-[520px] flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
           <ComposerTabs
             chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} initialValue={initialBrief} />}
