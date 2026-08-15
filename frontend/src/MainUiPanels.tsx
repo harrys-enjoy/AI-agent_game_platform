@@ -60,7 +60,39 @@ export function MainBriefingChatbot({ contextHint }: { contextHint?: string } = 
     } finally { setBusy(false); }
   }
 
-  return <section className="briefing-chatbot"><h3>Main Chatbot <span>업무 라우터</span></h3><div className="briefing-chat-messages">{messages.length === 0 && <p className="briefing-chat-empty">{contextHint ?? "간단한 질문이나 업무 내용을 입력하세요."}</p>}{messages.map((item, index) => <p className={item.role === "user" ? "briefing-chat-user" : "briefing-chat-answer"} key={`${item.role}-${index}`}>{item.text}</p>)}{busy && <p className="briefing-chat-answer">답변을 준비 중입니다…</p>}</div><form className="briefing-chat-composer" onSubmit={submit}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder={contextHint ? "다른 업무나 질문을 입력하세요" : "무엇을 도와드릴까요?"} /><button type="submit">➤</button></form></section>;
+  return (
+    <section className="briefing-chatbot">
+      {contextHint ? (
+        <h3>
+          AI Chat · Video Generation
+          <button className="reset-chat" type="button" onClick={() => setMessages([])}>
+            Reset chat
+          </button>
+        </h3>
+      ) : (
+        <h3>
+          Main Chatbot <span>업무 라우터</span>
+        </h3>
+      )}
+      <div className="briefing-chat-messages">
+        {messages.length === 0 && <p className="briefing-chat-empty">{contextHint ?? "간단한 질문이나 업무 내용을 입력하세요."}</p>}
+        {messages.map((item, index) => (
+          <p className={item.role === "user" ? "briefing-chat-user" : "briefing-chat-answer"} key={`${item.role}-${index}`}>
+            {item.text}
+          </p>
+        ))}
+        {busy && <p className="briefing-chat-answer">답변을 준비 중입니다…</p>}
+      </div>
+      <form className="briefing-chat-composer" onSubmit={submit}>
+        <input
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder={contextHint ? "Type a message..." : "무엇을 도와드릴까요?"}
+        />
+        <button type="submit">➤</button>
+      </form>
+    </section>
+  );
 }
 
 function MeetingSearchDetailPanel() {

@@ -23,7 +23,7 @@ describe("App - Video Generation sidebar entry", () => {
     await userEvent.click(screen.getByText("Video Generation"));
 
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Type a message...")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Type a message...")).toBeInTheDocument();
   });
 
   it("restores the generic chat panel when switching away from Video Generation", async () => {
@@ -43,7 +43,7 @@ describe("App - Video Generation sidebar entry", () => {
 
     await userEvent.click(screen.getByText("Video Generation"));
 
-    expect(await screen.findByPlaceholderText("다른 업무나 질문을 입력하세요")).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Type a message...")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("무엇을 도와드릴까요?")).not.toBeInTheDocument();
   });
 
@@ -52,7 +52,7 @@ describe("App - Video Generation sidebar entry", () => {
     await userEvent.click(screen.getByText("Video Generation"));
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
 
-    const chatbotInput = screen.getByPlaceholderText("다른 업무나 질문을 입력하세요");
+    const chatbotInput = screen.getByPlaceholderText("Type a message...");
     await userEvent.type(chatbotInput, "코드 버그 확인해줘");
     const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
     await userEvent.click(chatbotSubmit);
@@ -66,7 +66,7 @@ describe("App - Video Generation sidebar entry", () => {
     await userEvent.click(screen.getByText("Video Generation"));
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
 
-    const chatbotInput = screen.getByPlaceholderText("다른 업무나 질문을 입력하세요");
+    const chatbotInput = screen.getByPlaceholderText("Type a message...");
     await userEvent.type(chatbotInput, "안녕하세요");
     const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
     await userEvent.click(chatbotSubmit);
