@@ -1,0 +1,26 @@
+[
+  {
+    "id": "oga-rpg-tileset",
+    "title": "RPG Tileset",
+    "sourceUrl": "https://opengameart.org/content/rpg-tileset",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "usage": "catalog"
+  },
+  {
+    "id": "oga-free-game-objects",
+    "title": "Free Game Objects",
+    "sourceUrl": "https://opengameart.org/content/free-game-objects",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "usage": "codex"
+  },
+  {
+    "id": "oga-starfields",
+    "title": "Starfields",
+    "sourceUrl": "https://opengameart.org/content/starfields",
+    "license": "CC0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "usage": "world-setting-reference"
+  }
+]

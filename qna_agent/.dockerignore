@@ -1,0 +1,9 @@
+.git
+.worktrees
+.env
+.env.*
+!.env.example
+node_modules
+test
+docs
+README.md

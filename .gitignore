@@ -1,10 +1,17 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.pytest-tmp*/
-*.db
-node_modules/
-dist/
-.env
-.gstack/
-.worktrees/
+# secrets
+**/.env
+!**/.env.example
+
+# runtime artifacts
+**/*.db
+**/*.sqlite*
+
+# dependencies / build output
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/dist/
+**/build/
+**/.vite/
+**/*.tsbuildinfo
