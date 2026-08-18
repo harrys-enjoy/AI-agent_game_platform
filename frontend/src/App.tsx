@@ -21,7 +21,7 @@ import TaskLogPanel from "./TaskLogPanel";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
-type ChatTask = { id: string; chat: string; title: string; status: "working" | "done" | "error"; hidden: boolean };
+type ChatTask = { id: string; chat: string; title: string; status: "working" | "done" | "error"; hidden: boolean; owner?: string };
 type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] };
 type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string };
 const legacySections = ["Today Briefing", "Weekly Report", "Policies"];
@@ -32,6 +32,24 @@ const initialTasks: Task[] = [
   { id: "2", name: "영상 기획 초안 생성", owner: "T", status: "In Progress", agent: "Video Generation" },
   { id: "3", name: "PR 변경사항 검토", owner: "", status: "Ready to start", agent: "Development Assistant" },
 ];
+
+function agentWorkStorageKey(owner: string) {
+  return `ai-chat-tasks:${owner}`;
+}
+
+function loadAgentWorkTasks(owner: string): ChatTask[] {
+  try {
+    const scoped = window.localStorage.getItem(agentWorkStorageKey(owner));
+    if (scoped) return normalizeAgentWorkTasks(JSON.parse(scoped) as ChatTask[]).map((item) => ({ ...item, owner }));
+    const legacy = window.localStorage.getItem("ai-chat-tasks");
+    if (!legacy) return [];
+    const migrated = normalizeAgentWorkTasks(JSON.parse(legacy) as ChatTask[]).map((item) => ({ ...item, owner }));
+    window.localStorage.setItem(agentWorkStorageKey(owner), JSON.stringify(migrated));
+    return migrated;
+  } catch {
+    return [];
+  }
+}
 
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
@@ -44,12 +62,14 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("Today Briefing");
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [worksOpen, setWorksOpen] = useState(true);
+  const [policiesOpen, setPoliciesOpen] = useState(true);
+  const [policyView, setPolicyView] = useState<"company" | "operations">("operations");
   const [aiChatsOpen, setAiChatsOpen] = useState(false);
-  const [chatTasks, setChatTasks] = useState<ChatTask[]>(() => { try { return normalizeAgentWorkTasks(JSON.parse(window.localStorage.getItem("ai-chat-tasks") ?? "[]") as ChatTask[]); } catch { return []; } });
+  const [assigneeName, setAssigneeName] = useState(() => window.localStorage.getItem("main-assignee") ?? assigneeOptions[0].name);
+  const [chatTasks, setChatTasks] = useState<ChatTask[]>(() => loadAgentWorkTasks(assigneeName));
   const [recentGameQnaWorks, setRecentGameQnaWorks] = useState<RecentGameQnaWork[]>(() => { try { const saved = JSON.parse(window.localStorage.getItem("game-qna-recent-work") ?? "[]") as RecentGameQnaWork | RecentGameQnaWork[]; return Array.isArray(saved) ? saved.slice(0, 3) : saved ? [saved] : []; } catch { return []; } });
   const [pendingArtPrompt, setPendingArtPrompt] = useState<ArtPrompt | null>(() => { try { return JSON.parse(window.localStorage.getItem("game-qna-art-prompt") ?? "null") as ArtPrompt | null; } catch { return null; } });
   const [artPromptTransferStatus, setArtPromptTransferStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [assigneeName, setAssigneeName] = useState(() => window.localStorage.getItem("main-assignee") ?? assigneeOptions[0].name);
   const [assignments, setAssignments] = useState<AssigneeAssignments>(() => { try { return { ...defaultAssignments, ...JSON.parse(window.localStorage.getItem("assignee-assignments") ?? "{}") }; } catch { return defaultAssignments; } });
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
@@ -68,9 +88,24 @@ export default function App() {
   const currentChat = activeChat ?? "Workmate AI";
   const recentGameQnaWork = recentGameQnaWorks;
   const currentAssignee = findAssignee(assigneeName);
-  const currentSessionId = chatSessions[currentChat];
+  const currentSessionKey = `${assigneeName}::${currentChat}`;
+  const currentSessionId = chatSessions[currentSessionKey];
   const activeChatRef = useRef(currentChat);
   const messagesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeSection === "Company Policies") {
+      setPolicyView("company");
+      setActiveSection("Policies");
+    } else if (activeSection === "Operational Policies") {
+      setPolicyView("operations");
+      setActiveSection("Policies");
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    setChatTasks(loadAgentWorkTasks(assigneeName));
+  }, [assigneeName]);
 
   function recordGameQnaWork(request: string, status = "완료") {
     const work = createRecentGameQnaWork(request, status);
@@ -110,6 +145,18 @@ export default function App() {
   }, [chat, currentChat]);
 
   useEffect(() => {
+    let cancelled = false;
+    setMainChat([]);
+    fetch(`${API_BASE_URL}/api/chats/Main%20Chatbot/session?owner=${encodeURIComponent(assigneeName)}`)
+      .then((response) => response.ok ? response.json() as Promise<{ messages: StoredMessage[] }> : Promise.reject(new Error("Main Chatbot history failed")))
+      .then((session) => {
+        if (!cancelled) setMainChat(session.messages.filter((item) => item.role === "user" || item.role === "assistant").map((item) => ({ role: item.role as "user" | "assistant", text: item.content })));
+      })
+      .catch(() => { if (!cancelled) setMainChat([]); });
+    return () => { cancelled = true; };
+  }, [assigneeName]);
+
+  useEffect(() => {
     function routeFromMain(event: Event) {
       const detail = (event as CustomEvent<{ chat: string; message: string }>).detail;
       if (!detail?.chat) return;
@@ -131,7 +178,7 @@ export default function App() {
       setAiChatsOpen(true);
       setChatTasks((items) => {
         const next = syncGameQnaStoryReviewTask(items, state, `game-qna-${Date.now()}`);
-        window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next));
+        window.localStorage.setItem(agentWorkStorageKey(assigneeName), JSON.stringify(next.map((item) => ({ ...item, owner: assigneeName }))));
         return next;
       });
     }
@@ -143,15 +190,19 @@ export default function App() {
     activeChatRef.current = currentChat;
     let cancelled = false;
     setChat([]);
-    fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/session`)
+    fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/session?owner=${encodeURIComponent(assigneeName)}`)
       .then((response) => response.ok ? response.json() as Promise<{ session_id: string; messages: StoredMessage[] }> : Promise.reject(new Error("Chat history failed")))
-      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentChat]: session.session_id })); setChat(session.messages.map((item) => { const prompt = currentChat === "Game Q&A" && item.role === "assistant" ? extractArtPrompt(item.content) : null; return { id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : prompt ? formatArtPromptForChat(prompt) : item.content }; })); } })
+      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentSessionKey]: session.session_id })); setChat(session.messages.map((item) => { const prompt = currentChat === "Game Q&A" && item.role === "assistant" ? extractArtPrompt(item.content) : null; return { id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : prompt ? formatArtPromptForChat(prompt) : item.content }; })); } })
       .catch(() => { if (!cancelled) setChat([]); });
     return () => { cancelled = true; };
-  }, [currentChat]);
+  }, [currentChat, assigneeName]);
 
   function persistMessage(role: "user" | "assistant", content: string) {
-    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: currentSessionId }) }).catch(() => undefined);
+    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: currentSessionId, owner: assigneeName }) }).catch(() => undefined);
+  }
+
+  function persistMainMessage(role: "user" | "assistant", content: string) {
+    void fetch(`${API_BASE_URL}/api/chats/Main%20Chatbot/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, owner: assigneeName }) }).catch(() => undefined);
   }
 
   function routeBriefingRequest(request: string) {
@@ -168,12 +219,15 @@ export default function App() {
     if (!request || mainChatBusy) return;
     setMainMessage("");
     setMainChat((items) => [...items, { role: "user", text: request }]);
+    persistMainMessage("user", request);
     const agent = routeBriefingRequest(request);
     const isAgentRequest = agent !== "Workmate AI" || /업무|할 일|회의|프로젝트|마감|정책|workmate/i.test(request);
     if (isAgentRequest) {
       const target = agent === "Workmate AI" ? "Workmate AI" : agent;
       activateChatTask(target);
-      setMainChat((items) => [...items, { role: "assistant", text: `${target}로 연결합니다.` }]);
+      const routingMessage = `${target}로 연결합니다.`;
+      setMainChat((items) => [...items, { role: "assistant", text: routingMessage }]);
+      persistMainMessage("assistant", routingMessage);
       setTimeout(() => { activeChatRef.current = target; setActiveSection("Home"); setActiveChat(target); setMessage(request); }, 0);
       return;
     }
@@ -181,25 +235,30 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/chats/Main Chatbot/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: request }) });
       const data = response.ok ? await response.json() as { answer?: string } : {};
-      setMainChat((items) => [...items, { role: "assistant", text: data.answer ?? createChatReply(request) }]);
+      const answer = data.answer ?? createChatReply(request);
+      setMainChat((items) => [...items, { role: "assistant", text: answer }]);
+      persistMainMessage("assistant", answer);
     } catch {
-      setMainChat((items) => [...items, { role: "assistant", text: createChatReply(request) }]);
+      const answer = createChatReply(request);
+      setMainChat((items) => [...items, { role: "assistant", text: answer }]);
+      persistMainMessage("assistant", answer);
     } finally { setMainChatBusy(false); }
   }
 
   async function resetChat() {
-    const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/reset`, { method: "POST" });
+    const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/reset?owner=${encodeURIComponent(assigneeName)}`, { method: "POST" });
     if (!response.ok) return;
     const data = await response.json() as { session_id: string };
-    setChatSessions((items) => ({ ...items, [currentChat]: data.session_id }));
+    setChatSessions((items) => ({ ...items, [currentSessionKey]: data.session_id }));
     setChat([]);
   }
 
   function handleSectionClick(section: string) { const state = section === "Today Briefing" || section === "Weekly Report" ? { activeSection: section, activeChat: null } : selectMenu({ type: "section", id: section }); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
-  function activateChatTask(chatName: string) { setChatTasks((items) => { const existing = items.find((item) => item.chat === chatName); const next = existing ? items.map((item) => item.id === existing.id ? { ...item, hidden: false, status: "done" as const } : item) : [...items, { id: `chat-task-${Date.now()}`, chat: chatName, title: `${chatName} 작업`, status: "done" as const, hidden: false }]; window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
-  function startChatTask(chatName: string) { setChatTasks((items) => { const next = items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "working" as const } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
-  function completeChatTask(chatName: string) { setChatTasks((items) => { const next = items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "done" as const } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
-  function hideChatTask(taskId: string) { setChatTasks((items) => { const next = items.map((item) => item.id === taskId ? { ...item, hidden: true } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
+  function saveAgentWorkTasks(next: ChatTask[]) { const scoped = next.map((item) => ({ ...item, owner: assigneeName })); window.localStorage.setItem(agentWorkStorageKey(assigneeName), JSON.stringify(scoped)); return scoped; }
+  function activateChatTask(chatName: string) { setChatTasks((items) => { const existing = items.find((item) => item.chat === chatName); const next = existing ? items.map((item) => item.id === existing.id ? { ...item, hidden: false, status: "done" as const } : item) : [...items, { id: `chat-task-${Date.now()}`, chat: chatName, title: `${chatName} 작업`, status: "done" as const, hidden: false, owner: assigneeName }]; return saveAgentWorkTasks(next); }); }
+  function startChatTask(chatName: string) { setChatTasks((items) => saveAgentWorkTasks(items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "working" as const } : item))); }
+  function completeChatTask(chatName: string) { setChatTasks((items) => saveAgentWorkTasks(items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "done" as const } : item))); }
+  function hideChatTask(taskId: string) { setChatTasks((items) => saveAgentWorkTasks(items.map((item) => item.id === taskId ? { ...item, hidden: true } : item))); }
   function handleChatClick(chatName: string) { activateChatTask(chatName); const state = selectMenu({ type: "chat", id: chatName }, activeSection); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
   function changeAssignee(name: string) { setAssigneeName(name); window.localStorage.setItem("main-assignee", name); activeChatRef.current = "Workmate AI"; setActiveSection("Today Briefing"); setActiveChat(null); }
   function saveAssignments(next: AssigneeAssignments) { setAssignments(next); window.localStorage.setItem("assignee-assignments", JSON.stringify(next)); }
@@ -398,13 +457,17 @@ export default function App() {
   }
 
   function renderPolicies() {
-    return <TaskLogPanel />;
+    return policyView === "company" ? renderCompanyPolicies() : <TaskLogPanel />;
+  }
+
+  function renderCompanyPolicies() {
+    return <section className="policies-card"><div className="policies-heading"><div><p className="eyebrow">MAIN AGENT / POLICIES / COMPANY</p><h2>사내규정</h2><p>팀에서 함께 지켜야 할 기본 규정과 업무 기준입니다.</p></div><input aria-label="Search company policies" placeholder="규정 검색" /></div><div className="policy-grid"><article><span>01</span><h3>근무 및 휴가</h3><p>근무시간, 휴가, 재택근무 기준</p></article><article><span>02</span><h3>보안 및 개인정보</h3><p>정보보호와 데이터 취급 기준</p></article><article><span>03</span><h3>업무 운영</h3><p>회의, 승인, 협업 운영 기준</p></article><article><span>04</span><h3>복지 및 지원</h3><p>구성원 지원 제도와 이용 안내</p></article></div></section>;
   }
 
   const referenceReportKind = activeSection === "Today Briefing" ? "briefing" : activeSection === "Weekly Report" ? "weekly" : null;
 
   return <div className={`shell legacy-ui ${activeChat ? "chat-active agent-content-updated" : "section-active"}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant="legacy" activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant="updated" currentChat={activeChat} onSelect={selectQuickAction} />{activeChat === "Video Generation" && <div className="video-agent-host"><VideoAgentPage initialBrief={message} /></div>}{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
-    <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{legacySections.map((item) => <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item === "Today Briefing" ? "오늘 브리핑" : item === "Weekly Report" ? "주간 업무보고" : item}</button>)}<><button className="nav works-toggle" type="button" aria-expanded={worksOpen} onClick={() => setWorksOpen((open) => !open)}>◇ Works <span>{worksOpen ? "▾" : "▸"}</span></button>{worksOpen && <div className="nested-links">{chats.map((item) => <button className={`nested-link ${activeChat === item ? "active" : ""}`} type="button" onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</div>}<hr /><button className="section-toggle" type="button" aria-expanded={aiChatsOpen} onClick={() => setAiChatsOpen((open) => !open)}><small>Agent Work</small><span>{aiChatsOpen ? "▾" : "▸"}</span></button>{aiChatsOpen && <div className="nested-links task-links">{chatTasks.filter((task) => !task.hidden).map((task) => <div className="nested-task-row" key={task.id}><button className="nested-task" type="button" onClick={() => handleChatClick(task.chat)}><span className={task.status === "working" ? "task-working-dot" : "task-done-space"}>{task.status === "working" ? "○" : ""}</span>{task.title}</button><button className="nested-task-delete" type="button" aria-label={`${task.title} 삭제`} onClick={() => hideChatTask(task.id)}>×</button></div>)}</div>}</> <AssigneeSwitcher name={assigneeName} onChange={changeAssignee} assignments={assignments} onSaveAssignments={saveAssignments} /></aside>
+    <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{legacySections.map((item) => item === "Policies" ? <div key={item}><button className={`nav works-toggle ${activeSection === "Company Policies" || activeSection === "Operational Policies" ? "active" : ""}`} type="button" aria-expanded={policiesOpen} onClick={() => setPoliciesOpen((open) => !open)}>◇ Policies <span>{policiesOpen ? "▾" : "▸"}</span></button>{policiesOpen && <div className="nested-links policy-links"><button className={`nested-link ${activeSection === "Company Policies" ? "active" : ""}`} type="button" onClick={() => { setActiveSection("Company Policies"); setActiveChat(null); }}>사내규정</button><button className={`nested-link ${activeSection === "Operational Policies" ? "active" : ""}`} type="button" onClick={() => { setActiveSection("Operational Policies"); setActiveChat(null); }}>운영 원칙(Task 기록)</button></div>}</div> : <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item === "Today Briefing" ? "오늘 브리핑" : item === "Weekly Report" ? "주간 업무보고" : item}</button>)}<><button className="nav works-toggle" type="button" aria-expanded={worksOpen} onClick={() => setWorksOpen((open) => !open)}>◇ Works <span>{worksOpen ? "▾" : "▸"}</span></button>{worksOpen && <div className="nested-links">{chats.map((item) => <button className={`nested-link ${activeChat === item ? "active" : ""}`} type="button" onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</div>}<hr /><button className="section-toggle" type="button" aria-expanded={aiChatsOpen} onClick={() => setAiChatsOpen((open) => !open)}><small>Agent Work</small><span>{aiChatsOpen ? "▾" : "▸"}</span></button>{aiChatsOpen && <div className="nested-links task-links">{chatTasks.filter((task) => !task.hidden).map((task) => <div className="nested-task-row" key={task.id}><button className="nested-task" type="button" onClick={() => handleChatClick(task.chat)}><span className={task.status === "working" ? "task-working-dot" : "task-done-space"}>{task.status === "working" ? "○" : ""}</span>{task.title}</button><button className="nested-task-delete" type="button" aria-label={`${task.title} 삭제`} onClick={() => hideChatTask(task.id)}>×</button></div>)}</div>}</> <AssigneeSwitcher name={assigneeName} onChange={changeAssignee} assignments={assignments} onSaveAssignments={saveAssignments} /></aside>
     {activeChat !== "Video Generation" && <><main className="workspace">{activeSection === "Policies" && !activeChat ? renderPolicies() : <><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>PROJECT_DEMO</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel recentGameQnaWork={recentGameQnaWork} artPrompt={pendingArtPrompt} artPromptTransferStatus={artPromptTransferStatus} onSendArtPromptToVideo={() => void sendArtPromptToVideo()} /></>}</main>
     <aside className="chat-panel"><h3>AI Chat · {currentChat}<button className="reset-chat" type="button" onClick={() => void resetChat()}>Reset chat</button>{currentChat === "Game Q&A" && <button className="story-toggle" type="button" onClick={() => setIsStoryFormOpen((value) => !value)}>{isStoryFormOpen ? "Close" : "+ Add story"}</button>}</h3>{currentChat === "Game Q&A" && isStoryFormOpen && <form className="story-form" onSubmit={addStory}><input value={storyName} onChange={(event) => setStoryName(event.target.value)} placeholder="Story title" required /><input value={storyKeywords} onChange={(event) => setStoryKeywords(event.target.value)} placeholder="Keywords, comma separated" required /><textarea value={storyAnswer} onChange={(event) => setStoryAnswer(event.target.value)} placeholder="Story content" rows={5} required /><button type="submit">Save story</button>{storyNotice && <small>{storyNotice}</small>}</form>}{currentChat === "Game Q&A" && showCommandHelp && <div className="command-help" role="dialog" aria-label="Game Q&A commands"><div className="command-help-heading"><strong>Game Q&A 명령어</strong><button type="button" className="command-help-close" onClick={() => setShowCommandHelp(false)}>닫기</button></div>{commandCatalog.map((item) => <button type="button" className="command-item" key={item.command} onClick={() => selectGameQaCommand(item.command)}><strong>{item.command}</strong><span>{item.label} · {item.description}</span></button>)}</div>}<div className="messages" ref={messagesRef}>{chat.length ? chat.map(renderChatMessage) : <div className="empty">Type a message to start a conversation</div>}</div><form className="composer" onSubmit={submit}><input value={message} onChange={(event) => { setMessage(event.target.value); if (currentChat === "Game Q&A" && (event.target.value === "/" || event.target.value.startsWith("/?") || event.target.value.startsWith("/help"))) setShowCommandHelp(true); }} onKeyDown={(event) => { if (event.key === "Escape") setShowCommandHelp(false); }} placeholder={currentChat === "Game Q&A" ? "Type /? for Game Q&A commands..." : "Type a message..."} /><button type="submit">➤</button></form></aside></>}
   </div>;

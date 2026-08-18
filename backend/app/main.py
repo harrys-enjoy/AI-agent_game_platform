@@ -52,6 +52,7 @@ class ChatMessageRequest(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     session_id: str | None = None
+    owner: str = "default"
 
 
 class ChatReplyRequest(BaseModel):
@@ -248,24 +249,24 @@ def list_agents() -> list[AgentCard]:
 
 
 @app.get("/api/chats/{agent_name}/messages")
-def list_chat_messages(agent_name: str, session_id: str | None = None) -> list[dict[str, str]]:
-    return conversation_store.list_messages(agent_name, session_id)
+def list_chat_messages(agent_name: str, session_id: str | None = None, owner: str = "default") -> list[dict[str, str]]:
+    return conversation_store.list_messages(agent_name, session_id, owner)
 
 
 @app.get("/api/chats/{agent_name}/session")
-def get_chat_session(agent_name: str) -> dict:
-    session_id = conversation_store.current_session(agent_name)
-    return {"session_id": session_id, "messages": conversation_store.list_messages(agent_name, session_id)}
+def get_chat_session(agent_name: str, owner: str = "default") -> dict:
+    session_id = conversation_store.current_session(agent_name, owner)
+    return {"session_id": session_id, "messages": conversation_store.list_messages(agent_name, session_id, owner)}
 
 
 @app.post("/api/chats/{agent_name}/reset")
-def reset_chat_session(agent_name: str) -> dict[str, str]:
-    return {"session_id": conversation_store.reset(agent_name)}
+def reset_chat_session(agent_name: str, owner: str = "default") -> dict[str, str]:
+    return {"session_id": conversation_store.reset(agent_name, owner)}
 
 
 @app.post("/api/chats/{agent_name}/messages", status_code=201)
 def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str, str]:
-    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id)
+    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id, payload.owner)
 
 
 @app.post("/api/chats/{agent_name}/reply")

@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import type { UiVariant } from "./ui-variant";
+import { useEffect } from "react";
 import { quickActions } from "./ui-variant";
 
 export function PoliciesPanel() {
@@ -33,10 +34,26 @@ function routeMainRequest(request: string) {
   return null;
 }
 
-export function MainBriefingChatbot({ contextHint }: { contextHint?: string } = {}) {
+const MAIN_CHAT_API = "http://127.0.0.1:8000";
+
+export function MainBriefingChatbot({ contextHint, owner = window.localStorage.getItem("main-assignee") ?? "default" }: { contextHint?: string; owner?: string } = {}) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessages([]);
+    fetch(`${MAIN_CHAT_API}/api/chats/Main%20Chatbot/session?owner=${encodeURIComponent(owner)}`)
+      .then((response) => response.ok ? response.json() as Promise<{ messages: { role: "user" | "assistant"; content: string }[] }> : Promise.reject(new Error("history failed")))
+      .then((session) => { if (!cancelled) setMessages(session.messages.map((item) => ({ role: item.role, text: item.content }))); })
+      .catch(() => { if (!cancelled) setMessages([]); });
+    return () => { cancelled = true; };
+  }, [owner]);
+
+  function persist(role: "user" | "assistant", content: string) {
+    void fetch(`${MAIN_CHAT_API}/api/chats/Main%20Chatbot/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, owner }) }).catch(() => undefined);
+  }
 
   async function submit(event: { preventDefault: () => void }) {
     event.preventDefault();
@@ -44,9 +61,12 @@ export function MainBriefingChatbot({ contextHint }: { contextHint?: string } = 
     if (!request || busy) return;
     setMessage("");
     setMessages((items) => [...items, { role: "user", text: request }]);
+    persist("user", request);
     const target = routeMainRequest(request);
     if (target) {
-      setMessages((items) => [...items, { role: "assistant", text: `${target}로 연결합니다.` }]);
+      const answer = `${target}로 연결합니다.`;
+      setMessages((items) => [...items, { role: "assistant", text: answer }]);
+      persist("assistant", answer);
       window.dispatchEvent(new CustomEvent("main-chat-route", { detail: { chat: target, message: request } }));
       return;
     }
@@ -54,9 +74,13 @@ export function MainBriefingChatbot({ contextHint }: { contextHint?: string } = 
     try {
       const response = await fetch("http://127.0.0.1:8000/api/chats/Main Chatbot/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: request }) });
       const data = response.ok ? await response.json() as { answer?: string } : {};
-      setMessages((items) => [...items, { role: "assistant", text: data.answer ?? "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다." }]);
+      const answer = data.answer ?? "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다.";
+      setMessages((items) => [...items, { role: "assistant", text: answer }]);
+      persist("assistant", answer);
     } catch {
-      setMessages((items) => [...items, { role: "assistant", text: "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다." }]);
+      const answer = "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다.";
+      setMessages((items) => [...items, { role: "assistant", text: answer }]);
+      persist("assistant", answer);
     } finally { setBusy(false); }
   }
 
@@ -65,13 +89,16 @@ export function MainBriefingChatbot({ contextHint }: { contextHint?: string } = 
       {contextHint ? (
         <h3>
           AI Chat · Video Generation
-          <button className="reset-chat" type="button" onClick={() => setMessages([])}>
+          <button className="reset-chat" type="button" onClick={() => { void fetch(`${MAIN_CHAT_API}/api/chats/Main%20Chatbot/reset?owner=${encodeURIComponent(owner)}`, { method: "POST" }).then(() => setMessages([])); }}>
             Reset chat
           </button>
         </h3>
       ) : (
         <h3>
           Main Chatbot <span>업무 라우터</span>
+          <button className="reset-chat" type="button" onClick={() => { void fetch(`${MAIN_CHAT_API}/api/chats/Main%20Chatbot/reset?owner=${encodeURIComponent(owner)}`, { method: "POST" }).then(() => setMessages([])); }}>
+            Reset chat
+          </button>
         </h3>
       )}
       <div className="briefing-chat-messages">
