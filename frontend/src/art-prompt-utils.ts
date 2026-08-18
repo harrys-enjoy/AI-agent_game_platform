@@ -34,7 +34,12 @@ export function extractArtPrompt(answer: string): ArtPrompt | null {
       if (depth !== 0) continue;
       try {
         const parsed = JSON.parse(answer.slice(jsonStart, index + 1));
-        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as ArtPrompt : null;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        const candidate = parsed as ArtPrompt;
+        const hasStory = "story" in candidate || "스토리 맥락" in candidate;
+        const hasCharacter = "character" in candidate || "인물상" in candidate;
+        const hasContext = "context" in candidate || "갈등" in candidate;
+        return hasStory && hasCharacter && hasContext ? candidate : null;
       } catch {
         return null;
       }

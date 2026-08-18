@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:art-prompt": "node --experimental-strip-types scripts/art-prompt-test.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:agent-routing": "node --experimental-strip-types scripts/agent-routing-test.mjs",
