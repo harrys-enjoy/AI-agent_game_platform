@@ -1,0 +1,92 @@
+services:
+  main-agent:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ".env"
+    environment:
+      LIVE_AGENT_DISCOVERY: "true"
+      AGENT_REGISTRY: "workmate-agent,video-agent,dev-agent,game-qna-agent"
+      WORKMATE_AGENT_URL: "http://workmate-agent:8001/a2a"
+      VIDEO_AGENT_URL: "http://video-agent:8002/a2a"
+      DEV_AGENT_URL: "http://dev-agent:8003/a2a"
+      GAME_QNA_AGENT_URL: "http://game-qa-agent:3000/message:send"
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      VIDEO_SERVICE_TOKEN: "${VIDEO_SERVICE_TOKEN:-}"
+      DEV_SERVICE_TOKEN: "${DEV_SERVICE_TOKEN:-}"
+      GAME_QNA_SERVICE_TOKEN: "${GAME_QNA_SERVICE_TOKEN:-}"
+      ROUTER_LLM_ENABLED: "${ROUTER_LLM_ENABLED:-false}"
+      ROUTER_MODEL_NAME: "${ROUTER_MODEL_NAME:-}"
+      ROUTER_BASE_URL: "${ROUTER_BASE_URL:-https://integrate.api.nvidia.com/v1}"
+      ROUTER_API_KEY: "${ROUTER_API_KEY:-}"
+      ROUTER_TIMEOUT_SECONDS: "${ROUTER_TIMEOUT_SECONDS:-8}"
+    depends_on:
+      workmate-agent:
+        condition: service_healthy
+      video-agent:
+        condition: service_started
+      dev-agent:
+        condition: service_started
+      game-qa-agent:
+        condition: service_started
+
+  workmate-agent:
+    build: ../workmate-agent
+    expose: ["8001"]
+    environment:
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # ponytail: video-agent real source (../video_agent) needs a Gemini API key we don't
+  # have yet, so it stays on the mock-agents stand-in. Switch build to ../video_agent
+  # and add GEMINI_API_KEY once the key is issued.
+  video-agent:
+    build: ./mock-agents
+    expose: ["8002"]
+    environment:
+      AGENT_NAME: video-agent
+      AGENT_PORT: "8002"
+      CARD_FILE: /app/cards/video-agent.json
+
+  dev-agent:
+    build: ../dev_agent
+    expose: ["8003"]
+    # env_file은 main_agent/.env 하나로 통합(dev_agent/.env는 더 이상 안 씀) — 아래 environment:에
+    # 같은 키를 또 적으면 값이 비어있어도 그게 항상 이겨서 env_file 값을 덮어써버린다(실측 버그).
+    env_file:
+      - .env
+    environment:
+      DEFAULT_WORKSPACE_ID: "${DEFAULT_WORKSPACE_ID:-game-team-a}"
+
+  game-qa-agent:
+    build: "../qna_agent"
+    expose: ["3000"]
+    env_file:
+      - ".env"
+    environment:
+      PORT: "3000"
+      AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
+      MAIN_AGENT_URL: "http://main-agent:8000"
+
+  # Standalone GitHub dashboard (no API coupling with dev-agent) - iframed into
+  # the Development Assistant tab's Workspace Preview. Remapped to host 8004
+  # since main-agent already owns host 8000. Docker socket is intentionally
+  # NOT mounted here (it grants effective host-root) - the dashboard's
+  # deployment-status tab needs it, opt in later if that tab matters; see
+  # dev_agent/docker-compose.yml's kosa-front service for the full version.
+  kosa-front:
+    build: ../dev_agent/kosa_front
+    ports:
+      - "8004:8000"
+    env_file:
+      - .env
+
+networks:
+  default:
+    name: workmate-network

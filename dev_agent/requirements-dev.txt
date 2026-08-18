@@ -1,0 +1,14 @@
+# 로컬 개발/테스트 전용. 컨테이너 이미지에는 들어가지 않는다.
+# 설치: pip install -r requirements-dev.txt
+-r requirements.txt
+
+# Streamlit UI (app.py) — pyarrow/pandas/numpy/pydeck을 끌고 와 약 375MB를 차지하므로
+# a2a_server만 도는 컨테이너에서는 제외한다.
+streamlit
+
+# 테스트
+pytest
+httpx
+
+# LangGraph CLI (`langgraph dev`)
+langgraph-cli[inmem]

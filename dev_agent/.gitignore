@@ -1,0 +1,9 @@
+﻿.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.langgraph_api/
+.superpowers/
+# 개발 도구 로컬 설정 (Windows 전용 경로 포함 — 팀원 환경마다 다름)
+.claude/

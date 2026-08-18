@@ -1,0 +1,6 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "kosa": "./graph/build.py:build_graph"
+  }
+}
