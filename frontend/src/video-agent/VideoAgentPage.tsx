@@ -29,7 +29,11 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const { task, reconnecting, error, resumePolling } = useVideoTaskPolling(taskId);
+  const { task, reconnecting, error, notFound, resumePolling } = useVideoTaskPolling(taskId);
+
+  useEffect(() => {
+    if (notFound) window.localStorage.removeItem(STORAGE_KEY);
+  }, [notFound]);
 
   useEffect(() => {
     if (task?.status.state === "TASK_STATE_INPUT_REQUIRED" && task.status.unresolvedScenes) {
@@ -62,6 +66,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
     if (!taskId) return;
     try {
       await cancelVideoAgentTask(taskId);
+      resumePolling();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "취소 요청에 실패했습니다.");
     }
@@ -87,6 +92,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
   }
 
   const isBusy = task?.status.state === "TASK_STATE_SUBMITTED" || task?.status.state === "TASK_STATE_WORKING";
+  const canCancel = isBusy || task?.status.state === "TASK_STATE_INPUT_REQUIRED";
 
   return (
     <>
@@ -123,7 +129,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
               {error}
             </p>
           )}
-          {isBusy && (
+          {canCancel && (
             <button
               type="button"
               onClick={handleCancel}

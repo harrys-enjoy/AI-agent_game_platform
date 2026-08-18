@@ -30,6 +30,11 @@ describe("ChatComposer", () => {
     expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
   });
 
+  it("disables the brief textarea while a task is busy", () => {
+    render(<ChatComposer disabled={true} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("영상 브리프")).toBeDisabled();
+  });
+
   it("states the real duration and budget limits in the placeholder", () => {
     render(<ChatComposer disabled={false} onSubmit={vi.fn()} />);
     expect(

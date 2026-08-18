@@ -13,8 +13,11 @@ export async function createVideoAgentTask(message: string): Promise<MessageSend
   return response.json();
 }
 
+export class VideoAgentTaskNotFoundError extends Error {}
+
 export async function getVideoAgentTask(taskId: string): Promise<Task> {
   const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks/${encodeURIComponent(taskId)}`);
+  if (response.status === 404) throw new VideoAgentTaskNotFoundError(`video-agent task not found: ${taskId}`);
   if (!response.ok) throw new Error(`video-agent task fetch failed: HTTP ${response.status}`);
   const payload = await response.json();
   return payload.task as Task;
