@@ -74,4 +74,17 @@ describe("App - Video Generation sidebar entry", () => {
 
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
   });
+
+  it("shows the new Game Q&A story workspace immediately when routed there from Video Generation", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByText("Video Generation"));
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
+
+    const chatbotInput = screen.getByPlaceholderText("Type a message...");
+    await userEvent.type(chatbotInput, "스토리 검토해줘");
+    const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
+    await userEvent.click(chatbotSubmit);
+
+    expect(await screen.findByText("Story Review Workspace")).toBeInTheDocument();
+  });
 });
