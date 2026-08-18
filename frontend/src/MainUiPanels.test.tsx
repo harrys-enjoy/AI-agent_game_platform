@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MainBriefingChatbot } from "./MainUiPanels";
@@ -14,7 +14,7 @@ describe("MainBriefingChatbot", () => {
     expect(screen.getByText("간단한 질문이나 업무 내용을 입력하세요.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("무엇을 도와드릴까요?")).toBeInTheDocument();
     expect(screen.getByText("Main Chatbot")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reset chat" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset chat" })).toBeInTheDocument();
   });
 
   it("shows the contextHint as the empty-state text and an English placeholder when provided", () => {
@@ -33,8 +33,8 @@ describe("MainBriefingChatbot", () => {
     expect(screen.getByRole("button", { name: "Reset chat" })).toBeInTheDocument();
   });
 
-  it("Reset chat clears the local conversation without any network calls", async () => {
-    const fetchMock = vi.fn();
+  it("Reset chat calls the backend reset endpoint and clears the conversation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ messages: [] }) });
     vi.stubGlobal("fetch", fetchMock);
     render(<MainBriefingChatbot contextHint="영상 제작 요청은 왼쪽 채팅창을 이용해주세요." />);
 
@@ -44,7 +44,7 @@ describe("MainBriefingChatbot", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reset chat" }));
 
-    expect(screen.queryByText("영상 관련 질문")).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText("영상 관련 질문")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/chats/Main%20Chatbot/reset"), expect.objectContaining({ method: "POST" }));
   });
 });
