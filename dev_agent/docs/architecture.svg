@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1100" viewBox="0 0 1700 1100" role="img" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif">
+<title>개발 보조 멀티에이전트 아키텍처</title>
+<desc>Streamlit UI에서 받은 요청을 LangGraph supervisor가 계획으로 바꾸고, LLM 워커 4개와 결정적 노드 3개를 순서대로 실행한 뒤 결과를 결정적으로 조합해 리포트로 돌려주는 구조.</desc>
+
+<defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="#343A40"/>
+  </marker>
+</defs>
+
+<rect x="0" y="0" width="1700" height="1100" fill="#FFFFFF"/>
+
+<text x="850" y="60" text-anchor="middle" font-size="38" font-weight="700" fill="#212529">개발 보조 멀티에이전트 (kosa_project)</text>
+
+<!-- ================= 사용자 ================= -->
+<rect x="30" y="330" width="200" height="270" rx="10" fill="#FFFFFF" stroke="#343A40" stroke-width="2.5"/>
+<text x="130" y="378" text-anchor="middle" font-size="22" font-weight="700" fill="#212529">사용자</text>
+<text x="130" y="403" text-anchor="middle" font-size="13" fill="#495057">(개발자 · 기획자)</text>
+<circle cx="130" cy="443" r="17" fill="#343A40"/>
+<path d="M102 495 C102 472 116 464 130 464 C144 464 158 472 158 495 Z" fill="#343A40"/>
+<text x="48" y="530" font-size="13" fill="#343A40">• 레포 · PR 번호 입력</text>
+<text x="48" y="556" font-size="13" fill="#343A40">• 요청 문장 입력</text>
+<text x="48" y="582" font-size="13" fill="#343A40">• 리포트 확인</text>
+
+<!-- ================= Streamlit UI ================= -->
+<rect x="325" y="200" width="235" height="355" rx="10" fill="#FFFFFF" stroke="#2B8A3E" stroke-width="2.5"/>
+<text x="442" y="243" text-anchor="middle" font-size="20" font-weight="700" fill="#2B8A3E">Streamlit UI</text>
+<text x="442" y="267" text-anchor="middle" font-size="13" fill="#495057">(app.py)</text>
+<rect x="407" y="290" width="71" height="48" rx="4" fill="none" stroke="#2B8A3E" stroke-width="3"/>
+<rect x="417" y="300" width="51" height="28" fill="#2B8A3E" opacity="0.18"/>
+<rect x="435" y="338" width="15" height="10" fill="#2B8A3E"/>
+<line x1="422" y1="352" x2="463" y2="352" stroke="#2B8A3E" stroke-width="3" stroke-linecap="round"/>
+<text x="343" y="395" font-size="13" fill="#343A40">• 요청 폼 입력</text>
+<text x="343" y="421" font-size="13" fill="#343A40">• 실행 진행 스트리밍</text>
+<text x="343" y="447" font-size="13" fill="#343A40">• 최종 리포트 렌더</text>
+<text x="343" y="473" font-size="13" fill="#343A40">• 대화 기록 표시</text>
+<text x="343" y="499" font-size="13" fill="#343A40">• API 키 가드</text>
+
+<!-- ================= History ================= -->
+<rect x="325" y="615" width="235" height="195" rx="10" fill="#FFFFFF" stroke="#1971C2" stroke-width="2.5"/>
+<text x="442" y="655" text-anchor="middle" font-size="19" font-weight="700" fill="#1971C2">History</text>
+<text x="442" y="678" text-anchor="middle" font-size="13" fill="#495057">(graph/history.py)</text>
+<text x="343" y="712" font-size="13" fill="#343A40">• 세션 최근 8턴 기록</text>
+<text x="343" y="738" font-size="13" fill="#343A40">• 요청 / 워커 / 오류</text>
+<text x="343" y="764" font-size="13" fill="#343A40">• 그래프 State와 분리</text>
+<text x="343" y="790" font-size="13" fill="#343A40">• → history_context</text>
+
+<!-- ================= LangGraph 엔진 ================= -->
+<rect x="615" y="110" width="615" height="730" rx="12" fill="#FFFFFF" stroke="#2B8A3E" stroke-width="3"/>
+<text x="922" y="152" text-anchor="middle" font-size="21" font-weight="700" fill="#2B8A3E">LangGraph StateGraph</text>
+<text x="922" y="176" text-anchor="middle" font-size="13" fill="#495057">(graph/build.py · supervisor 중심 루프)</text>
+
+<!-- Supervisor -->
+<rect x="640" y="200" width="565" height="170" rx="8" fill="#FFFFFF" stroke="#2B8A3E" stroke-width="2"/>
+<text x="662" y="235" font-size="18" font-weight="700" fill="#2B8A3E">Supervisor</text>
+<text x="1185" y="235" text-anchor="end" font-size="12" fill="#868E96">graph/supervisor.py</text>
+<text x="662" y="272" font-size="13" fill="#343A40">• 요청 → 실행 계획(plan) 구조화 출력</text>
+<text x="662" y="298" font-size="13" fill="#343A40">• nemotron-super-49b · timeout 45s</text>
+<text x="662" y="324" font-size="13" fill="#343A40">• ci_trigger → ci_agent 순서 코드 보정</text>
+<text x="662" y="350" font-size="13" fill="#343A40">• 최종 응답 결정적 조합 (LLM 미사용)</text>
+
+<!-- State -->
+<rect x="640" y="390" width="565" height="115" rx="8" fill="#FFFFFF" stroke="#1971C2" stroke-width="2"/>
+<text x="662" y="425" font-size="17" font-weight="700" fill="#1971C2">State</text>
+<text x="1185" y="425" text-anchor="end" font-size="12" fill="#868E96">graph/state.py</text>
+<text x="662" y="460" font-size="13" fill="#343A40">• request · diff · branches · prs · ci_logs · results</text>
+<text x="662" y="486" font-size="13" fill="#343A40">• merge_results 리듀서 — 워커 결과 키 단위 병합</text>
+
+<!-- LLM 워커 -->
+<rect x="640" y="525" width="565" height="175" rx="8" fill="#FFFFFF" stroke="#E8590C" stroke-width="2"/>
+<text x="662" y="558" font-size="17" font-weight="700" fill="#E8590C">LLM 워커</text>
+<text x="1185" y="558" text-anchor="end" font-size="12" fill="#868E96">graph/workers.py</text>
+<rect x="662" y="578" width="128" height="38" rx="6" fill="#E8590C" opacity="0.10"/>
+<rect x="800" y="578" width="128" height="38" rx="6" fill="#E8590C" opacity="0.10"/>
+<rect x="938" y="578" width="128" height="38" rx="6" fill="#E8590C" opacity="0.10"/>
+<rect x="1076" y="578" width="128" height="38" rx="6" fill="#E8590C" opacity="0.10"/>
+<text x="726" y="602" text-anchor="middle" font-size="12" font-weight="700" fill="#C2410C">review_agent</text>
+<text x="864" y="602" text-anchor="middle" font-size="12" font-weight="700" fill="#C2410C">endpoint_agent</text>
+<text x="1002" y="602" text-anchor="middle" font-size="12" font-weight="700" fill="#C2410C">branch_agent</text>
+<text x="1140" y="602" text-anchor="middle" font-size="12" font-weight="700" fill="#C2410C">ci_agent</text>
+<text x="662" y="645" font-size="13" fill="#343A40">• diff 리뷰 · 엔드포인트 변경 · 브랜치 현황 · CI 요약</text>
+<text x="662" y="671" font-size="13" fill="#343A40">• llama-3.1-8b-instruct · timeout 30s</text>
+
+<!-- 결정적 노드 -->
+<rect x="640" y="720" width="565" height="100" rx="8" fill="#FFFFFF" stroke="#7048E8" stroke-width="2"/>
+<text x="662" y="750" font-size="17" font-weight="700" fill="#7048E8">결정적 노드 (LLM 미사용)</text>
+<rect x="662" y="765" width="163" height="34" rx="6" fill="#7048E8" opacity="0.10"/>
+<rect x="841" y="765" width="163" height="34" rx="6" fill="#7048E8" opacity="0.10"/>
+<rect x="1020" y="765" width="163" height="34" rx="6" fill="#7048E8" opacity="0.10"/>
+<text x="743" y="787" text-anchor="middle" font-size="12" font-weight="700" fill="#5B21B6">fetch</text>
+<text x="922" y="787" text-anchor="middle" font-size="12" font-weight="700" fill="#5B21B6">ci_trigger</text>
+<text x="1101" y="787" text-anchor="middle" font-size="12" font-weight="700" fill="#5B21B6">deploy_trigger</text>
+<text x="662" y="815" font-size="13" fill="#343A40">• GitHub 수집 · 워크플로 실행 · 로컬 Docker 배포</text>
+
+<!-- ================= 외부 시스템 ================= -->
+<rect x="1330" y="160" width="340" height="195" rx="10" fill="#FFFFFF" stroke="#E8590C" stroke-width="2.5"/>
+<text x="1500" y="200" text-anchor="middle" font-size="19" font-weight="700" fill="#E8590C">NVIDIA NIM API</text>
+<text x="1500" y="224" text-anchor="middle" font-size="12" fill="#495057">(integrate.api.nvidia.com)</text>
+<text x="1350" y="272" font-size="13" fill="#343A40">• supervisor → nemotron-super-49b</text>
+<text x="1350" y="298" font-size="13" fill="#343A40">• 워커 → llama-3.1-8b-instruct</text>
+<text x="1350" y="324" font-size="13" fill="#343A40">• 무료 티어 · 혼잡 시 응답 지연</text>
+
+<rect x="1330" y="390" width="340" height="195" rx="10" fill="#FFFFFF" stroke="#1971C2" stroke-width="2.5"/>
+<text x="1500" y="430" text-anchor="middle" font-size="19" font-weight="700" fill="#1971C2">GitHub API / Actions</text>
+<text x="1500" y="454" text-anchor="middle" font-size="12" fill="#495057">(PyGithub · GITHUB_TOKEN)</text>
+<text x="1350" y="502" font-size="13" fill="#343A40">• 브랜치 · PR · diff 수집</text>
+<text x="1350" y="528" font-size="13" fill="#343A40">• 체크 런 실패 로그 조회</text>
+<text x="1350" y="554" font-size="13" fill="#343A40">• workflow_dispatch 실행</text>
+
+<rect x="1330" y="620" width="340" height="195" rx="10" fill="#FFFFFF" stroke="#7048E8" stroke-width="2.5"/>
+<text x="1500" y="660" text-anchor="middle" font-size="19" font-weight="700" fill="#7048E8">로컬 Docker Desktop</text>
+<text x="1500" y="684" text-anchor="middle" font-size="12" fill="#495057">(graph/deploy_trigger.py)</text>
+<text x="1350" y="732" font-size="13" fill="#343A40">• git clone → docker build</text>
+<text x="1350" y="758" font-size="13" fill="#343A40">• kosa-deploy 컨테이너 교체</text>
+<text x="1350" y="784" font-size="13" fill="#343A40">• 포트 8000~8010 · 헬스체크</text>
+
+<!-- ================= 화살표 ================= -->
+<line x1="232" y1="420" x2="321" y2="420" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="277" y="408" text-anchor="middle" font-size="12" fill="#495057">요청 입력</text>
+<line x1="321" y1="470" x2="232" y2="470" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="277" y="458" text-anchor="middle" font-size="12" fill="#495057">리포트 확인</text>
+
+<line x1="564" y1="370" x2="611" y2="370" stroke="#343A40" stroke-width="2" marker-start="url(#ar)" marker-end="url(#ar)"/>
+
+<line x1="442" y1="611" x2="442" y2="559" stroke="#343A40" stroke-width="2" marker-start="url(#ar)" marker-end="url(#ar)"/>
+
+<line x1="1234" y1="235" x2="1326" y2="235" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="223" text-anchor="middle" font-size="12" fill="#495057">LLM 호출</text>
+<line x1="1326" y1="285" x2="1234" y2="285" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="273" text-anchor="middle" font-size="12" fill="#495057">계획 · 응답</text>
+
+<line x1="1234" y1="465" x2="1326" y2="465" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="453" text-anchor="middle" font-size="12" fill="#495057">수집 · 실행</text>
+<line x1="1326" y1="515" x2="1234" y2="515" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="503" text-anchor="middle" font-size="12" fill="#495057">diff · 로그</text>
+
+<line x1="1234" y1="695" x2="1326" y2="695" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="683" text-anchor="middle" font-size="12" fill="#495057">배포 요청</text>
+<line x1="1326" y1="745" x2="1234" y2="745" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+<text x="1280" y="733" text-anchor="middle" font-size="12" fill="#495057">URL · 상태</text>
+
+<!-- ================= 전체 흐름 요약 ================= -->
+<rect x="30" y="880" width="1640" height="110" rx="10" fill="#FFFFFF" stroke="#343A40" stroke-width="2.5"/>
+<text x="60" y="942" font-size="20" font-weight="700" fill="#212529">전체 흐름 요약</text>
+
+<rect x="296" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="373" y="939" text-anchor="middle" font-size="13" fill="#343A40">요청 입력</text>
+<line x1="453" y1="934" x2="481" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="483" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="560" y="939" text-anchor="middle" font-size="13" fill="#343A40">계획 수립</text>
+<line x1="640" y1="934" x2="668" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="670" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="747" y="939" text-anchor="middle" font-size="13" fill="#343A40">GitHub 수집</text>
+<line x1="827" y1="934" x2="855" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="857" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="934" y="939" text-anchor="middle" font-size="13" fill="#343A40">워커 실행</text>
+<line x1="1014" y1="934" x2="1042" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="1044" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="1121" y="939" text-anchor="middle" font-size="13" fill="#343A40">supervisor 복귀</text>
+<line x1="1201" y1="934" x2="1229" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="1231" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="1308" y="939" text-anchor="middle" font-size="13" fill="#343A40">결정적 조합</text>
+<line x1="1388" y1="934" x2="1416" y2="934" stroke="#343A40" stroke-width="2" marker-end="url(#ar)"/>
+
+<rect x="1418" y="910" width="155" height="48" rx="8" fill="#F8F9FA" stroke="#ADB5BD" stroke-width="1.5"/>
+<text x="1495" y="939" text-anchor="middle" font-size="13" fill="#343A40">리포트 출력</text>
+
+<!-- ================= 실행 · 검증 ================= -->
+<rect x="30" y="1005" width="1640" height="62" rx="10" fill="#FFFFFF" stroke="#343A40" stroke-width="2.5"/>
+<text x="60" y="1043" font-size="17" font-weight="700" fill="#212529">실행 · 검증</text>
+<text x="210" y="1043" font-size="13" fill="#343A40">streamlit run app.py → localhost:8501     ·     환경변수: NVIDIA_API_KEY · GITHUB_TOKEN     ·     pytest tests/ 47 passed · 4 skipped     ·     smoke_test.py — LLM 가짜로 그래프 배선 검증</text>
+
+</svg>

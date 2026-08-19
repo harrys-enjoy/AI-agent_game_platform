@@ -1,0 +1,102 @@
+services:
+  main-agent:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ".env"
+    environment:
+      LIVE_AGENT_DISCOVERY: "true"
+      AGENT_REGISTRY: "workmate-agent,video-agent,dev-agent,game-qna-agent"
+      WORKMATE_AGENT_URL: "http://workmate-agent:8001/a2a"
+      VIDEO_AGENT_URL: "http://video-agent:8002/a2a"
+      DEV_AGENT_URL: "http://dev-agent:8003/a2a"
+      GAME_QNA_AGENT_URL: "http://game-qa-agent:3000/message:send"
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      VIDEO_SERVICE_TOKEN: "${VIDEO_SERVICE_TOKEN:-}"
+      DEV_SERVICE_TOKEN: "${DEV_SERVICE_TOKEN:-}"
+      GAME_QNA_SERVICE_TOKEN: "${GAME_QNA_SERVICE_TOKEN:-}"
+      ROUTER_LLM_ENABLED: "${ROUTER_LLM_ENABLED:-false}"
+      ROUTER_MODEL_NAME: "${ROUTER_MODEL_NAME:-}"
+      ROUTER_BASE_URL: "${ROUTER_BASE_URL:-https://integrate.api.nvidia.com/v1}"
+      ROUTER_API_KEY: "${ROUTER_API_KEY:-}"
+      ROUTER_TIMEOUT_SECONDS: "${ROUTER_TIMEOUT_SECONDS:-8}"
+    depends_on:
+      workmate-agent:
+        condition: service_healthy
+      video-agent:
+        condition: service_started
+      dev-agent:
+        condition: service_started
+
+  workmate-agent:
+    build: ../workmate-agent
+    expose: ["8001"]
+    # OPENAI_API_KEY 등 실 Provider 자격 증명은 workmate-agent 자체 .env를
+    # 그대로 재사용한다 - 이 Compose의 .env는 Main Agent 설정만 갖고 있다.
+    env_file:
+      - "../workmate-agent/.env"
+    environment:
+      WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      APP_BASE_URL: "http://workmate-agent:8001/a2a"
+    # NOTE: her feat/workmate-ui-port branch also adds GOOGLE_TOKEN_FILE + volume
+    # mounts here for a Calendar/Gmail live-signal feature (daily_briefing), backed
+    # by code in workflows/daily_briefing.py + load_google_credentials() and a
+    # .runtime/ SQLite path. None of that exists yet in this repo's ../workmate-agent
+    # checkout (.env.example here only documents WORKMATE_SERVICE_TOKEN/APP_BASE_URL) -
+    # that's a newer version of her separate workmate-agent repo. Pull that in
+    # separately, then re-add the GOOGLE_TOKEN_FILE env var + volumes block.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  video-agent:
+    build: ../video_agent
+    ports:
+      - "8002:8002"
+    # GEMINI_API_KEY / VEO_API_KEY / LTX_API_KEY / VIDEO_SERVICE_TOKEN all come
+    # from .env. Host port is mapped (not just `expose`) so MEDIA_PUBLIC_BASE_URL
+    # links (default http://localhost:8002) resolve from a browser, not just
+    # container-to-container.
+    env_file:
+      - .env
+
+  dev-agent:
+    build: ../dev_agent
+    expose: ["8003"]
+    # env_file은 main_agent/.env 하나로 통합(dev_agent/.env는 더 이상 안 씀) — 아래 environment:에
+    # 같은 키를 또 적으면 값이 비어있어도 그게 항상 이겨서 env_file 값을 덮어써버린다(실측 버그).
+    env_file:
+      - .env
+    environment:
+      DEFAULT_WORKSPACE_ID: "${DEFAULT_WORKSPACE_ID:-game-team-a}"
+
+  game-qa-agent:
+    build: "../qna_agent"
+    expose: ["3000"]
+    env_file:
+      - ".env"
+    environment:
+      PORT: "3000"
+      AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
+      MAIN_AGENT_URL: "http://main-agent:8000"
+
+  # Standalone GitHub dashboard (no API coupling with dev-agent) - iframed into
+  # the Development Assistant tab's Workspace Preview. Remapped to host 8004
+  # since main-agent already owns host 8000. Docker socket is intentionally
+  # NOT mounted here (it grants effective host-root) - the dashboard's
+  # deployment-status tab needs it, opt in later if that tab matters; see
+  # dev_agent/docker-compose.yml's kosa-front service for the full version.
+  kosa-front:
+    build: ../dev_agent/kosa_front
+    ports:
+      - "8004:8000"
+    env_file:
+      - .env
+
+networks:
+  default:
+    name: workmate-network

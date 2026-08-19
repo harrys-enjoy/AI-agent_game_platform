@@ -1,0 +1,9 @@
+# 화이트리스트 방식 — 루트 .dockerignore와 같은 이유(자격증명 파일이 이미지에 들어가는 사고 방지).
+*
+
+!requirements.txt
+!main.py
+!static/
+!templates/
+
+__pycache__/

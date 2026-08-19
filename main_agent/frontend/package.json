@@ -1,0 +1,41 @@
+{
+  "name": "main-ai-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test:agent-routing": "node --experimental-strip-types scripts/agent-routing-test.mjs",
+    "test:art-prompt": "node --experimental-strip-types scripts/art-prompt-test.mjs",
+    "test:preview": "node --experimental-strip-types scripts/preview-utils-test.mjs",
+    "test:preview-mode": "node --experimental-strip-types scripts/preview-mode-test.mjs",
+    "test:menu": "node --experimental-strip-types scripts/menu-utils-test.mjs",
+    "test:task": "node --experimental-strip-types scripts/task-utils-test.mjs",
+    "test:command": "node --experimental-strip-types scripts/command-utils-test.mjs",
+    "test:story": "node --experimental-strip-types scripts/story-utils-test.mjs",
+    "test:resume": "node --experimental-strip-types scripts/resume-utils-test.mjs",
+    "test:story-import": "node --experimental-strip-types scripts/story-import-test.mjs",
+    "test:video-agent": "vitest run"
+  },
+  "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.4",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "^10.5.4",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^3.4.19",
+    "vitest": "^4.1.10"
+  }
+}

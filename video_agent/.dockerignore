@@ -1,0 +1,12 @@
+.git
+.claude
+.superpowers
+.worktrees
+media
+tests
+docs
+scripts
+*.md
+__pycache__
+*.pyc
+.pytest_cache

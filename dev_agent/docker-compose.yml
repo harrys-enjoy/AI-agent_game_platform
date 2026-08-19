@@ -1,0 +1,31 @@
+services:
+  dev-agent:
+    build: .
+    ports:
+      - "8003:8003"
+    environment:
+      - ELICE_API_KEY=${ELICE_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DEV_SERVICE_TOKEN=${DEV_SERVICE_TOKEN}
+      - WORKSPACE_REPO_MAP=${WORKSPACE_REPO_MAP}
+      # main_agent(오케스트레이터)는 workspace_id를 안 보낸다 — 없을 때 쓸 기본값.
+      - DEFAULT_WORKSPACE_ID=${DEFAULT_WORKSPACE_ID}
+      # 테스트용 임시 스위치 — 켜면 레포 접근 제어가 완전히 해제된다. 테스트 끝나면 제거할 것.
+      - REPO_ACCESS_CONTROL_DISABLED=${REPO_ACCESS_CONTROL_DISABLED:-false}
+
+  # GitHub 대시보드(kosa_front). dev-agent와 독립적으로 동작 — 배포/브랜치 상황을 보여주는
+  # 별도 화면일 뿐, 서로 API 호출을 주고받지 않는다.
+  kosa-front:
+    build: ./kosa_front
+    ports:
+      - "8000:8000"
+    environment:
+      # 루트 .env의 GitHub PAT을 재사용. 대시보드가 조회할 레포는 따로 지정해야 한다.
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_OWNER=${GITHUB_OWNER}
+      - GITHUB_REPO=${GITHUB_REPO}
+    # "배포 현황" 탭이 호스트의 Docker를 docker CLI로 직접 조회한다(graph/deploy_trigger.py가
+    # 띄운 kosa-deploy-* 컨테이너). 이 소켓 마운트는 컨테이너에 호스트 Docker에 대한 사실상
+    # root 권한을 주는 것과 같다 — kosa-front 이미지가 신뢰할 수 있는 소스일 때만 유지할 것.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

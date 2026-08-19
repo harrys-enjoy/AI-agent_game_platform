@@ -1,0 +1,1159 @@
+{
+  "dev-guide": [
+    {
+      "id": "game-loop",
+      "name": "게임 루프 설계",
+      "keywords": [
+        "게임 루프",
+        "핵심 루프",
+        "플레이 루프"
+      ],
+      "answer": "게임 루프는 플레이어의 핵심 행동, 즉각적인 보상, 다음 목표의 연결로 설계합니다. 먼저 반복할 행동을 한 문장으로 정의하고, 1~3분 안에 작은 피드백을 제공한 뒤 장기 목표로 확장하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "core-mechanics",
+      "name": "핵심 시스템 기획",
+      "keywords": [
+        "핵심 시스템",
+        "시스템 기획",
+        "게임 시스템"
+      ],
+      "answer": "핵심 시스템은 플레이어가 자주 수행하는 행동부터 정의합니다. 입력, 상태 변화, 보상, 실패 조건을 표로 정리하면 구현 범위와 밸런스 기준을 명확하게 잡을 수 있습니다.",
+      "originalContent": true
+    },
+    {
+      "id": "quest-design",
+      "name": "퀘스트 설계",
+      "keywords": [
+        "퀘스트 설계",
+        "퀘스트",
+        "미션 기획"
+      ],
+      "answer": "퀘스트는 목표, 진행 조건, 방해 요소, 완료 보상, 다음 행동을 포함해야 합니다. 설명을 읽지 않아도 현재 목표와 다음 목적지를 알 수 있도록 상태 피드백을 짧고 반복적으로 제공하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "balance-basics",
+      "name": "밸런스 기초",
+      "keywords": [
+        "밸런스",
+        "밸런싱",
+        "난이도 조절"
+      ],
+      "answer": "밸런스는 플레이어의 숙련도와 반복 횟수를 기준으로 조정합니다. 평균 클리어 시간, 실패 지점, 자원 소모량을 기록하고 한 번에 한 변수만 바꾸어 비교하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "player-progression",
+      "name": "성장 구조 설계",
+      "keywords": [
+        "성장 구조",
+        "성장 시스템",
+        "진행 설계"
+      ],
+      "answer": "성장 구조는 단기 성장과 장기 목표를 분리합니다. 단기 보상은 다음 플레이를 유도하고, 장기 목표는 플레이어가 선택할 수 있는 방향성과 누적 성취감을 제공해야 합니다.",
+      "originalContent": true
+    },
+    {
+      "id": "visual-language",
+      "name": "비주얼 언어",
+      "keywords": [
+        "비주얼 언어",
+        "아트 방향",
+        "아트 스타일"
+      ],
+      "answer": "비주얼 언어는 색상, 형태, 재질, 조명, 카메라 규칙으로 정의합니다. 핵심 오브젝트가 배경과 섞이지 않도록 우선순위별 대비 규칙을 문서화하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "environment-art",
+      "name": "환경 아트 가이드",
+      "keywords": [
+        "환경 아트",
+        "배경 디자인",
+        "레벨 아트"
+      ],
+      "answer": "환경 아트는 플레이 동선과 탐색 정보를 먼저 보여줘야 합니다. 주요 경로는 명도와 형태를 단순하게 유지하고, 선택 경로에는 색상·소품·조명으로 탐색 신호를 배치하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "character-silhouette",
+      "name": "캐릭터 실루엣",
+      "keywords": [
+        "캐릭터 실루엣",
+        "캐릭터 디자인",
+        "실루엣"
+      ],
+      "answer": "캐릭터 실루엣은 작은 화면에서도 역할과 행동이 구분되어야 합니다. 머리, 무기, 이동 장비처럼 기능을 설명하는 형태를 우선하고 장식은 마지막에 추가하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "ui-art-guide",
+      "name": "UI 아트 가이드",
+      "keywords": [
+        "UI 아트",
+        "UI 디자인",
+        "인터페이스 디자인"
+      ],
+      "answer": "UI 아트는 정보의 중요도에 따라 크기, 위치, 색상 대비를 차등 적용합니다. 상호작용 가능한 요소의 상태와 비활성 상태를 명확히 구분하고 동일한 기능에는 동일한 시각 규칙을 사용하세요.",
+      "originalContent": true
+    },
+    {
+      "id": "lighting-guide",
+      "name": "조명 연출 가이드",
+      "keywords": [
+        "조명 연출",
+        "라이팅",
+        "빛 연출"
+      ],
+      "answer": "조명은 분위기뿐 아니라 진행 방향과 위험 요소를 전달해야 합니다. 기본 조명, 목표 지점 조명, 위험 신호 조명을 분리해 색상과 강도 규칙을 정하면 장면 간 일관성이 생깁니다.",
+      "originalContent": true
+    }
+  ],
+  "catalog": [
+    {
+      "id": "oga-rpg-tileset",
+      "name": "RPG Tileset",
+      "keywords": [
+        "RPG Tileset",
+        "RPG 타일셋",
+        "타일셋"
+      ],
+      "answer": "OpenGameArt의 RPG Tileset은 16x16 RPG용 타일셋으로, 기사·궁수·마법사·동굴·건물·물·몬스터 등의 태그가 공개되어 있습니다.",
+      "sourceRef": "oga-rpg-tileset"
+    },
+    {
+      "id": "ember-village",
+      "name": "잿불 마을",
+      "keywords": [
+        "잿불 마을",
+        "마을"
+      ],
+      "answer": "잿불 마을은 화산 지대 동쪽에 있는 거점입니다."
+    },
+    {
+      "id": "glass-harbor",
+      "name": "유리 항구",
+      "keywords": [
+        "유리 항구",
+        "항구",
+        "정박지"
+      ],
+      "answer": "유리 항구는 유리별의 반사광을 이용해 비공정의 항로를 조정하는 부유 정박지입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "wind-lift",
+      "name": "바람 승강로",
+      "keywords": [
+        "바람 승강로",
+        "승강로",
+        "이동로"
+      ],
+      "answer": "바람 승강로는 지상 마을과 상층 항로를 연결하는 오래된 수직 운송 시설입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "ash-observatory",
+      "name": "잿빛 관측소",
+      "keywords": [
+        "잿빛 관측소",
+        "관측소"
+      ],
+      "answer": "잿빛 관측소는 유리별의 밝기 변화를 기록하고 항로 경보를 발령하는 외곽 시설입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "cloud-market",
+      "name": "구름 장터",
+      "keywords": [
+        "구름 장터",
+        "장터",
+        "시장"
+      ],
+      "answer": "구름 장터는 여러 항로의 상인과 탐험가가 모여 지도와 부품을 교환하는 이동 시장입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "night-garden",
+      "name": "밤의 정원",
+      "keywords": [
+        "밤의 정원",
+        "정원"
+      ],
+      "answer": "밤의 정원은 유리별의 빛을 저장하는 식물이 자라는 폐쇄형 생태 구역입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    }
+  ],
+  "codex": [
+    {
+      "id": "oga-free-game-objects",
+      "name": "Free Game Objects",
+      "keywords": [
+        "무료 게임 오브젝트",
+        "Free Game Objects",
+        "게임 오브젝트"
+      ],
+      "answer": "OpenGameArt의 Free Game Objects는 나무, 상자, 플랫폼, 문 등을 포함한 100개 이상의 2D 게임 오브젝트 모음입니다.",
+      "sourceRef": "oga-free-game-objects"
+    },
+    {
+      "id": "lumens",
+      "name": "루멘",
+      "keywords": [
+        "루멘",
+        "루멘 약점"
+      ],
+      "answer": "루멘의 약점은 냉기 속성입니다."
+    },
+    {
+      "id": "frost-wolf",
+      "name": "서리 늑대",
+      "keywords": [
+        "서리 늑대",
+        "늑대",
+        "냉기"
+      ],
+      "answer": "서리 늑대는 상층 설원에 무리를 이루어 사는 냉기 속성의 야수입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "ember-moth",
+      "name": "불씨 나방",
+      "keywords": [
+        "불씨 나방",
+        "나방",
+        "불씨"
+      ],
+      "answer": "불씨 나방은 잿불 마을의 화로 주변에 모이며 날개에 작은 불씨를 품고 있습니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "route-compass",
+      "name": "항로 나침반",
+      "keywords": [
+        "항로 나침반",
+        "나침반",
+        "항로"
+      ],
+      "answer": "항로 나침반은 일반 자북이 아니라 유리별의 빛 방향을 가리키는 탐험 장비입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "star-shard",
+      "name": "별의 파편",
+      "keywords": [
+        "별의 파편",
+        "파편",
+        "결정"
+      ],
+      "answer": "별의 파편은 유리별에서 떨어져 나온 결정 조각으로, 약한 빛을 저장할 수 있습니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "ash-lantern",
+      "name": "잿불 등불",
+      "keywords": [
+        "잿불 등불",
+        "등불",
+        "잿불"
+      ],
+      "answer": "잿불 등불은 바람이 거센 항로에서도 불꽃을 유지하도록 만들어진 휴대용 조명입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "glass-beetle",
+      "name": "유리 딱정벌레",
+      "keywords": [
+        "유리 딱정벌레",
+        "딱정벌레",
+        "유리"
+      ],
+      "answer": "유리 딱정벌레는 빛나는 등껍질로 어두운 폐허를 밝히는 작은 생물입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "sky-skiff",
+      "name": "하늘 보트",
+      "keywords": [
+        "하늘 보트",
+        "보트",
+        "비공정"
+      ],
+      "answer": "하늘 보트는 짧은 항로를 오가는 소형 비공정으로 한 명의 조종사와 두 명의 승객을 태웁니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "echo-seed",
+      "name": "메아리 씨앗",
+      "keywords": [
+        "메아리 씨앗",
+        "씨앗",
+        "식물"
+      ],
+      "answer": "메아리 씨앗은 주변에서 들은 소리를 저장했다가 밤이 되면 다시 재생하는 식물의 씨앗입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "tide-bell",
+      "name": "조류 종",
+      "keywords": [
+        "조류 종",
+        "종",
+        "조류"
+      ],
+      "answer": "조류 종은 공중 해류가 바뀔 때 울려 항로 감시단에 날씨 변화를 알립니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "hollow-mask",
+      "name": "빈 얼굴 가면",
+      "keywords": [
+        "빈 얼굴 가면",
+        "가면",
+        "유물"
+      ],
+      "answer": "빈 얼굴 가면은 착용자의 목소리를 기록해 오래된 항로의 암호를 재생하는 유물입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "jeonuchi-codex",
+      "name": "전우치 — 바람을 훔치는 자",
+      "keywords": [
+        "전우치",
+        "전우치 약점",
+        "도술",
+        "변신",
+        "공략"
+      ],
+      "answer": "전우치는 변신과 도술로 기록과 명령 체계를 교란한다. 게임에서의 약점은 진실을 드러내는 효과와 봉인 계열 공격이며, 변신 중 집중력을 끊으면 방어가 약해진다. 서사적으로는 즉각적인 구원을 우선해 사후 책임과 혼란을 충분히 감당하지 못할 수 있다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "jeonuchi-freedom",
+        "record-forgery-incident",
+        "wind-community",
+        "glass-star-heart",
+        "ending-jeonuchi"
+      ]
+    },
+    {
+      "id": "honggildong-codex",
+      "name": "홍길동 — 새로운 질서의 설계자",
+      "keywords": [
+        "홍길동",
+        "홍길동 약점",
+        "평등",
+        "공동체",
+        "질서",
+        "공략"
+      ],
+      "answer": "홍길동은 공동체를 강화하고 질서 기반의 보호와 자원 재분배를 이끈다. 게임에서의 약점은 규칙의 허점을 이용한 교란, 지휘 체계 분리, 예측 불가능한 변수다. 서사적으로는 평등을 지키기 위한 규칙이 통제와 감시로 변질될 위험이 있다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "honggildong-order",
+        "record-forgery-incident",
+        "wind-community",
+        "glass-star-heart",
+        "ending-honggildong"
+      ]
+    },
+    {
+      "id": "yeonhwa-codex",
+      "name": "연화 — 기록을 잇는 중립자",
+      "keywords": [
+        "연화",
+        "연화 약점",
+        "여우구슬",
+        "기록",
+        "중립자",
+        "공략"
+      ],
+      "answer": "연화는 여우구슬과 기록 해석 능력으로 세 세력의 진실을 연결한다. 게임에서의 약점은 여우구슬 사용에 따른 기억과 체력 소모로, 장기전에서 취약해진다. 서사적으로는 모든 진실을 기록하려는 태도가 직접적인 결단을 늦추고 고립을 키울 수 있다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "side-yeonhwa",
+        "side-third-banner",
+        "record-forgery-incident",
+        "glass-star-heart"
+      ]
+    },
+    {
+      "id": "wind-band-codex",
+      "name": "전우치 세력 — 바람의 도적단",
+      "keywords": [
+        "전우치 세력",
+        "바람의 도적단",
+        "조직",
+        "세력 약점",
+        "공략"
+      ],
+      "answer": "바람의 도적단은 신분·기록·명령에 묶인 사람을 해방하려는 전우치의 세력이다. 변장꾼, 기록 탈취자, 밀수꾼, 추방민이 모이며 기습·정보전·변신술·빠른 이동이 강점이다. 통일된 지휘 체계가 약하고 자유가 사적 복수로 변질될 수 있다는 점이 약점이다. 홍길동 세력과 목적은 일부 같지만 질서와 책임 범위에서 충돌한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "wind-community",
+        "record-forgery-incident",
+        "side-jeonuchi-fall",
+        "ending-jeonuchi"
+      ]
+    },
+    {
+      "id": "alive-community-codex",
+      "name": "홍길동 세력 — 활빈 공동체",
+      "keywords": [
+        "홍길동 세력",
+        "활빈 공동체",
+        "조직",
+        "세력 약점",
+        "공략"
+      ],
+      "answer": "활빈 공동체는 차별 없는 공동체와 지속 가능한 규칙을 세우려는 홍길동의 세력이다. 피난민, 농민, 기술자, 경비대, 기록 담당자가 모이며 자원 배분·방어·조직력·장기전이 강점이다. 규칙과 감시가 내부 통제와 권력 집중으로 변질될 수 있다는 점이 약점이다. 전우치 세력과 협력할 수 있지만 무명회에는 감시 대상이 된다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "honggildong-order",
+        "wind-community",
+        "record-forgery-incident",
+        "side-honggildong-fall",
+        "ending-honggildong"
+      ]
+    },
+    {
+      "id": "unnamed-society-codex",
+      "name": "무명회 — 기록 없는 자들의 연합",
+      "keywords": [
+        "무명회",
+        "무명회 세력",
+        "제3세력",
+        "조직",
+        "세력 약점",
+        "공략"
+      ],
+      "answer": "무명회는 어느 영웅이나 조직도 역사를 독점하지 못하게 감시하는 제3세력이다. 기록관, 피난민, 전직 조직원, 피해자 대표가 모이며 정보 수집·폭로·세력 간 균형 조정이 강점이다. 감시를 명분으로 새로운 통제 조직이 될 수 있고 공통 목표 외의 결속이 약하다는 점이 약점이다. 전우치와 홍길동을 모두 불신하며 연화의 기록을 핵심 증거로 활용한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedLoreIds": [
+        "side-unnamed-society",
+        "side-third-banner",
+        "side-ashes-ledger",
+        "side-yeonhwa"
+      ]
+    }
+  ],
+  "lore": [
+    {
+      "id": "glass-star-origin",
+      "name": "유리별의 기원",
+      "keywords": [
+        "유리별",
+        "유리별의 기원"
+      ],
+      "answer": "유리별은 오래전 상층 대기가 굳어 만들어진 거대한 빛의 결정체라는 독자 설정입니다. 지상 항로는 유리별의 빛을 기준으로 방향을 정합니다.",
+      "sourceRef": "oga-starfields",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "route-watch",
+      "name": "항로 감시단",
+      "keywords": [
+        "항로 감시단",
+        "감시단"
+      ],
+      "answer": "항로 감시단은 유리별의 파편과 지상 항로를 관리하는 중립 세력이라는 독자 설정입니다. 어느 도시에도 속하지 않으며 탐사대의 통행 기록을 보관합니다.",
+      "sourceRef": "oga-starfields",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "faded-route-incident",
+      "name": "빛바랜 항로 사건",
+      "keywords": [
+        "빛바랜 항로 사건",
+        "빛바랜 항로"
+      ],
+      "answer": "빛바랜 항로 사건은 유리별의 빛이 약해져 오래된 탐사 항로가 끊긴 사건이라는 독자 설정입니다. 이후 항로 감시단과 각 도시 탐사대 사이에 새로운 길의 관리권을 둘러싼 갈등이 생겼습니다.",
+      "sourceRef": "oga-starfields",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "oga-starfields",
+      "name": "Starfields",
+      "keywords": [
+        "Starfields",
+        "스타필드 배경",
+        "우주 배경"
+      ],
+      "answer": "OpenGameArt의 Starfields는 우주와 별을 주제로 한 배경 자료입니다. 이 항목은 세계관 서사 대신 시각적 세계 설정 참고용으로 제공합니다.",
+      "sourceRef": "oga-starfields"
+    },
+    {
+      "id": "ash-covenant",
+      "name": "잿불 협약",
+      "keywords": [
+        "잿불 협약"
+      ],
+      "answer": "잿불 협약은 화산 지대의 도시를 보호하기 위해 결성된 세력입니다."
+    },
+    {
+      "id": "glass-harbor-lore",
+      "name": "유리 항구의 서약",
+      "keywords": [
+        "유리 항구의 서약",
+        "유리 항구"
+      ],
+      "answer": "유리 항구의 서약은 모든 선장이 항로의 위험과 발견을 함께 기록하겠다고 맹세하는 관습입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "sky-weavers",
+      "name": "하늘 직조단",
+      "keywords": [
+        "하늘 직조단",
+        "직조단"
+      ],
+      "answer": "하늘 직조단은 바람의 흐름을 읽어 항로용 돛과 비공정의 방향타를 제작하는 장인 집단입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "observatory-signal",
+      "name": "관측소의 신호",
+      "keywords": [
+        "관측소의 신호",
+        "관측소",
+        "신호"
+      ],
+      "answer": "관측소의 신호는 유리별의 밝기 변화가 항로를 바꾸기 전에 각 지역에 보내는 세 단계 경보입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "north-route",
+      "name": "북쪽 항로",
+      "keywords": [
+        "북쪽 항로",
+        "북쪽",
+        "항로"
+      ],
+      "answer": "북쪽 항로는 얼음 구름과 서리 늑대의 서식지를 지나지만 가장 빠르게 상층 도시로 이어집니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "lantern-oath",
+      "name": "등불의 맹세",
+      "keywords": [
+        "등불의 맹세",
+        "맹세",
+        "등불"
+      ],
+      "answer": "등불의 맹세는 항로에서 조난자를 발견한 선박이 반드시 불씨를 나누어야 한다는 오래된 규칙입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "mirror-rain",
+      "name": "거울비",
+      "keywords": [
+        "거울비",
+        "비",
+        "기상"
+      ],
+      "answer": "거울비는 유리별의 먼지가 구름에 섞여 내리는 현상으로, 빗방울마다 짧은 기억의 장면이 비칩니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "quiet-engine",
+      "name": "고요한 엔진",
+      "keywords": [
+        "고요한 엔진",
+        "엔진",
+        "유물"
+      ],
+      "answer": "고요한 엔진은 연료와 소음 없이 비공정을 움직였다고 전해지는 고대 장치이며 아직 작동 원리가 밝혀지지 않았습니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "cloud-market-accord",
+      "name": "구름 장터 협정",
+      "keywords": [
+        "구름 장터 협정",
+        "구름 장터",
+        "협정"
+      ],
+      "answer": "구름 장터 협정은 어느 세력도 이동 시장의 항로와 거래 기록을 독점하지 못하게 만든 중립 협약입니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "starfall-season",
+      "name": "별비의 계절",
+      "keywords": [
+        "별비의 계절",
+        "별비",
+        "계절"
+      ],
+      "answer": "별비의 계절에는 작은 별의 파편이 지상에 떨어져 새로운 길과 위험을 동시에 만들어 냅니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "last-beacon",
+      "name": "마지막 등대",
+      "keywords": [
+        "마지막 등대",
+        "등대",
+        "빛"
+      ],
+      "answer": "마지막 등대는 빛바랜 항로 사건 이후에도 꺼지지 않은 유일한 신호 시설로, 잃어버린 항로의 좌표를 보존하고 있습니다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "oga-starfields"
+      ]
+    },
+    {
+      "id": "jeonuchi-freedom",
+      "name": "전우치 — 바람을 훔치는 자",
+      "keywords": [
+        "전우치",
+        "도술",
+        "자유",
+        "변신"
+      ],
+      "answer": "전우치는 시민의 삶을 묶는 기록과 명령이 약자를 보호하지 못한다면, 그것을 속이고 무너뜨릴 권리가 있다고 믿는다. 그는 변신과 도술로 권력자의 거짓을 폭로하고, 규칙 밖에 갇힌 개인을 먼저 구한다. 그의 행동은 자유를 되찾지만, 혼란 이후의 책임까지 해결하지는 못할 수 있다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "jeonuchi-codex"
+      ]
+    },
+    {
+      "id": "honggildong-order",
+      "name": "홍길동 — 새로운 질서의 설계자",
+      "keywords": [
+        "홍길동",
+        "평등",
+        "공동체",
+        "질서",
+        "율도국"
+      ],
+      "answer": "홍길동은 개인의 영웅적 행동만으로는 차별을 끝낼 수 없으며, 누구나 보호받을 수 있는 공동체와 규칙이 필요하다고 믿는다. 그는 출생과 신분의 기록을 폐지하고 자원을 재분배하려 하지만, 평등을 지키기 위한 규칙이 새로운 감시와 통제가 될 위험도 안고 있다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "honggildong-codex",
+        "alive-community-codex"
+      ]
+    },
+    {
+      "id": "record-forgery-incident",
+      "name": "시민 기록 조작 사건",
+      "keywords": [
+        "시민 기록 조작 사건",
+        "신분 기록",
+        "기록 위조",
+        "추방"
+      ],
+      "answer": "유리별의 지배 세력이 시민 기록을 조작해 특정 계층을 도시 밖으로 추방한 사건이다. 전우치는 기록 보관소를 습격해 모든 진실을 공개하려 하고, 홍길동은 피해자들을 먼저 바람의 공동체로 이주시킨다. 같은 피해를 본 두 사람은 구원의 순서와 책임의 범위를 다르게 판단한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "jeonuchi-codex",
+        "honggildong-codex",
+        "yeonhwa-codex",
+        "wind-band-codex",
+        "alive-community-codex"
+      ]
+    },
+    {
+      "id": "wind-community",
+      "name": "바람의 공동체",
+      "keywords": [
+        "바람의 공동체",
+        "새 공동체",
+        "자치",
+        "이주"
+      ],
+      "answer": "바람의 공동체는 출생 기록보다 선택과 능력을 중시하는 사람들의 정착지다. 홍길동은 이곳에 안정적인 규칙과 자원 배분 체계를 세우려 하고, 전우치는 규칙이 다시 누군가를 묶는 순간마다 그것을 흔들어야 한다고 주장한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "jeonuchi-codex",
+        "honggildong-codex",
+        "wind-band-codex",
+        "alive-community-codex"
+      ]
+    },
+    {
+      "id": "glass-star-heart",
+      "name": "유리별의 심장",
+      "keywords": [
+        "유리별의 심장",
+        "기억 장치",
+        "신분 통제",
+        "중앙 기록"
+      ],
+      "answer": "유리별의 심장은 시민의 기억과 신분 기록을 하나로 묶을 수 있는 고대 장치다. 전우치는 누구도 타인의 기억을 소유해서는 안 된다며 장치를 파괴하려 하고, 홍길동은 차별 기록을 제거한 뒤 공동체의 안전을 위해 제한적으로 관리하려 한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "jeonuchi-codex",
+        "honggildong-codex",
+        "yeonhwa-codex"
+      ]
+    },
+    {
+      "id": "choice-axis-freedom-order",
+      "name": "자유와 질서의 선택축",
+      "keywords": [
+        "자유와 질서",
+        "선택",
+        "진실 공개",
+        "안정"
+      ],
+      "answer": "플레이어의 선택은 선악 점수가 아니라 개인의 자유와 공동체의 안정, 진실의 공개와 사회적 혼란 방지 사이의 균형으로 기록된다. 전우치와 홍길동 중 누구를 따르든 각 선택에는 구원받는 사람과 새롭게 부담을 떠안는 사람이 함께 생긴다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "campaign-record-choice",
+      "name": "1장 — 같은 사건, 다른 해결",
+      "keywords": [
+        "1장",
+        "같은 사건 다른 해결",
+        "캠페인",
+        "시작"
+      ],
+      "answer": "시민 기록 조작 사건이 발생한다. 전우치는 기록 보관소를 열어 모든 이름과 거짓을 공개하고, 홍길동은 피해자들이 안전해질 때까지 기록의 일부를 숨긴다. 플레이어는 진실을 먼저 세상에 알릴지, 사람을 먼저 보호할지 선택한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "campaign-wind-thief",
+      "name": "2장 — 바람의 도둑과 새 나라의 설계자",
+      "keywords": [
+        "2장",
+        "바람의 도둑",
+        "새 나라의 설계자",
+        "규칙"
+      ],
+      "answer": "전우치는 바람의 공동체 규칙을 훔쳐 외부에 공개하며, 안전을 위해 비밀을 만드는 순간 공동체도 지배자가 된다고 주장한다. 홍길동은 공개되지 않은 규칙이 약자를 보호하기 위한 장치라고 반박한다. 플레이어는 투명성의 범위와 공동체의 경계를 정한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "campaign-glass-heart",
+      "name": "3장 — 유리별의 심장",
+      "keywords": [
+        "3장",
+        "유리별의 심장",
+        "기억",
+        "장치"
+      ],
+      "answer": "두 사람은 시민의 기억을 통제할 수 있는 유리별의 심장을 발견한다. 전우치는 장치를 파괴하면 다시는 누구도 기록에 갇히지 않는다고 믿고, 홍길동은 장치를 관리해 차별 기록만 제거해야 한다고 믿는다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "campaign-choice-war",
+      "name": "4장 — 선택의 전쟁",
+      "keywords": [
+        "4장",
+        "선택의 전쟁",
+        "자유",
+        "안정",
+        "결정"
+      ],
+      "answer": "유리별의 여러 도시가 두 사람의 방식을 따르며 갈라진다. 플레이어는 개인을 즉시 구하는 행동, 장기적인 제도 개혁, 진실 공개, 혼란 방지 중 무엇을 우선할지 결정한다. 어느 선택도 모든 피해를 없애지는 못한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "campaign-no-good-evil",
+      "name": "5장 — 선악 없는 결말",
+      "keywords": [
+        "5장",
+        "선악 없는 결말",
+        "결말",
+        "대립"
+      ],
+      "answer": "마지막 장에서 플레이어는 승자를 정하는 대신 어떤 위험을 감수할지 선택한다. 전우치의 자유는 혼란을 남길 수 있고, 홍길동의 평등은 통제로 굳어질 수 있다. 결말은 옳고 그름의 판정이 아니라 선택한 가치와 그 대가를 보여준다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "ending-jeonuchi",
+      "name": "전우치 결말 — 열린 하늘",
+      "keywords": [
+        "전우치 결말",
+        "열린 하늘",
+        "자유 결말"
+      ],
+      "answer": "유리별의 심장이 파괴되고 시민 기록은 누구의 소유도 아니게 된다. 사람들은 자유롭게 이름을 바꾸고 이동할 수 있지만, 도시마다 새로운 약속을 직접 만들어야 하므로 혼란과 책임도 커진다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "jeonuchi-codex",
+        "wind-band-codex"
+      ]
+    },
+    {
+      "id": "ending-honggildong",
+      "name": "홍길동 결말 — 평등한 성벽",
+      "keywords": [
+        "홍길동 결말",
+        "평등한 성벽",
+        "질서 결말"
+      ],
+      "answer": "홍길동은 유리별의 심장을 공동체의 감시 아래 두고 차별 기록을 제거한다. 모두가 법의 보호를 받지만, 안전을 위한 기록과 감시가 새로운 자유의 제한으로 느껴지는 사람들도 남는다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ],
+      "relatedCodexIds": [
+        "honggildong-codex",
+        "alive-community-codex"
+      ]
+    },
+    {
+      "id": "ending-cooperation",
+      "name": "협력 결말 — 두 개의 열쇠",
+      "keywords": [
+        "협력 결말",
+        "두 개의 열쇠",
+        "타협"
+      ],
+      "answer": "전우치와 홍길동은 유리별의 심장을 한 사람이 단독으로 사용할 수 없도록 두 개의 열쇠로 나눈다. 자유를 지키는 감시와 질서를 검증하는 반대 권한이 함께 생기지만, 갈등은 끝나지 않고 계속 협상을 요구한다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "ending-independent",
+      "name": "독립 결말 — 작은 약속들",
+      "keywords": [
+        "독립 결말",
+        "작은 약속들",
+        "자치"
+      ],
+      "answer": "플레이어는 두 사람 모두의 중앙 해법을 거부하고 도시마다 다른 자치 규칙을 만든다. 지역의 자유와 공동체 안정은 높아지지만, 서로 다른 규칙 사이의 갈등을 조정하는 새로운 책임이 플레이어에게 남는다.",
+      "originalContent": true,
+      "inspirationSources": [
+        "전우치전의 도술·변신·권위 풍자 모티프",
+        "홍길동전의 신분 질서·공동체·이상향 모티프"
+      ]
+    },
+    {
+      "id": "side-ashes-ledger",
+      "name": "재의 장부",
+      "keywords": [
+        "재의 장부",
+        "번외편",
+        "전우치 홍길동 외전",
+        "세력의 몰락"
+      ],
+      "answer": "재의 장부는 전우치와 홍길동의 세력이 무너진 뒤, 세 세력의 죄와 희생자의 이름을 기록한 번외 이야기다. 연화는 장부의 마지막 페이지에 아직 기록되지 않은 이름이 무명회 자신이라는 사실을 밝혀낸다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "unnamed-society-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "side-unnamed-society",
+      "name": "무명회",
+      "keywords": [
+        "무명회",
+        "제3세력",
+        "영웅 없는 세상",
+        "중립 세력"
+      ],
+      "answer": "무명회는 전우치와 홍길동 어느 쪽에도 속하지 않는 사람들의 연합이다. 전우치의 도술로 피해를 입은 사람, 홍길동의 규율에 희생된 사람, 조정에서 버림받은 기록관과 피난민이 모여 어떤 영웅도 절대 권력을 갖지 못하게 하려 한다. 그러나 영웅을 감시하던 무명회 역시 점차 새로운 감시자가 된다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "unnamed-society-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "side-yeonhwa",
+      "name": "연화의 기록",
+      "keywords": [
+        "연화",
+        "히로인",
+        "여우구슬",
+        "제3의 선택",
+        "재의 장부"
+      ],
+      "answer": "연화는 전우치의 여우구슬과 천서의 비밀, 홍길동의 새로운 질서가 남긴 기록을 함께 알고 있는 중립자다. 그녀는 전우치에게 자유가 방종이 될 수 있음을, 홍길동에게 질서가 통제가 될 수 있음을, 무명회에게 감시도 지배가 될 수 있음을 경고한다. 연화는 누구의 연인이 되는 대신 세 세력의 잘못을 기록하고 공개하는 선택을 한다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "yeonhwa-codex",
+        "unnamed-society-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "side-jeonuchi-fall",
+      "name": "전우치 세력의 몰락",
+      "keywords": [
+        "전우치 세력",
+        "전우치의 몰락",
+        "자유의 타락",
+        "사적 복수"
+      ],
+      "answer": "전우치의 세력은 자유를 나누려 했지만 일부 구성원이 그 이름으로 상단과 홍길동 세력의 식량 창고를 습격하고 사적 복수를 시작하면서 분열된다. 전우치는 부하를 처벌하려 하지만, 부하들은 자신들이 그에게 배운 대로 가진 자의 것을 빼앗았을 뿐이라고 반박한다. 전우치는 자신의 이름과 관련된 문서와 상징을 없애고 지도자의 자리에서 물러난다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "wind-band-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "side-honggildong-fall",
+      "name": "홍길동 세력의 해체",
+      "keywords": [
+        "홍길동 세력",
+        "홍길동의 몰락",
+        "질서의 타락",
+        "활빈당 해체"
+      ],
+      "answer": "홍길동의 세력은 공동체를 지키기 위해 이동 허가와 사상 검증, 내부 감시를 도입한다. 안전을 위한 규칙은 강제 복종으로 변하고, 홍길동의 인장이 찍힌 연화 체포 명령서가 발견되면서 그는 조직이 자신 없이도 권력을 행사하고 있음을 깨닫는다. 홍길동은 모든 기록과 인장을 공개해 조직을 해체하고, 각 지역 공동체가 스스로 규칙을 정하도록 한다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "alive-community-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "side-third-banner",
+      "name": "세 번째 깃발",
+      "keywords": [
+        "세 번째 깃발",
+        "무명회의 결말",
+        "연화의 선택",
+        "기록의 공개"
+      ],
+      "answer": "전우치와 홍길동의 세력이 무너진 뒤 무명회는 세 번째 깃발을 세우고 모든 영웅을 감시하려 한다. 연화는 무명회의 기록소에서 재의 장부를 발견하고, 장부의 마지막 빈 페이지가 무명회 자신의 죄를 기록할 자리임을 폭로한다. 그녀는 세 세력의 기록을 모두 공개해 누구도 역사를 독점하지 못하게 한다. 이 결말에서 승자는 없지만, 어떤 세력도 처음부터 옳았다고 주장할 수 없게 된다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore",
+        "jeonuchi-honggildong-adaptation"
+      ],
+      "relatedCodexIds": [
+        "yeonhwa-codex",
+        "unnamed-society-codex"
+      ],
+      "storyArc": "side-story"
+    },
+    {
+      "id": "lore-route-light-memory-discovery",
+      "name": "빛과 기억의 항로 발견",
+      "keywords": [
+        "빛과 기억의 항로",
+        "특정 항로",
+        "숨은 항로",
+        "항로 발견",
+        "유리별의 기억"
+      ],
+      "answer": "얼음 구름과 서리 늑대의 서식지를 통과한 탐사대는 기존 지도에 기록되지 않은 새로운 항로를 발견한다. 이 항로는 유리별의 빛이 특정한 각도로 반사되는 순간에만 모습을 드러내며, 과거 항로 개척자들의 기억이 빛의 잔향으로 남아 있다. 이 발견의 가치는 새로운 이동로를 확보하는 데 있지 않다. 유리별이 단순한 항로 표식이 아니라 사람들의 선택과 기억을 보존하는 존재라는 사실을 증명한다는 데 있다. 질서의 세력은 항로를 통제해 교역과 기록을 독점하려 하고, 전우치는 발견된 항로를 모두에게 개방해야 한다고 주장한다. 홍길동은 항로의 안전과 공정한 이용 규칙을 세우려 하며, 연화는 항로에 남은 기억의 진위와 기록 조작 여부를 검증한다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore"
+      ],
+      "relatedLoreIds": [
+        "glass-star-origin",
+        "north-route",
+        "dawn-mountain"
+      ],
+      "relatedCodexIds": [],
+      "storyArc": "main-route"
+    },
+    {
+      "id": "dawn-mountain",
+      "name": "여명산",
+      "keywords": [
+        "여명산",
+        "상층 진입",
+        "거대한 산",
+        "얼음 구름",
+        "서리 늑대",
+        "상층 항로"
+      ],
+      "answer": "얼음 구름과 서리 늑대의 서식지를 지나 상층으로 향하는 길에는 여명산이라 불리는 거대한 산이 솟아 있다. 여명산은 유리별의 빛과 오래된 기억의 잔향이 오랜 시간 쌓여 형성된 경계 지형이다. 산을 넘기 위해서는 숨은 항로의 빛이 나타나는 시간, 서리 늑대의 이동 흔적, 얼음 구름의 흐름을 모두 이해해야 한다. 산 정상에는 상층 항로를 관측할 수 있는 오래된 탐사 지점이 남아 있으며, 여명산은 발견한 항로의 가치와 탐사자의 자격을 증명하는 시련이 된다.",
+      "originalContent": true,
+      "sourceRef": null,
+      "inspirationSources": [
+        "original-lore"
+      ],
+      "relatedLoreIds": [
+        "north-route",
+        "lore-route-light-memory-discovery"
+      ],
+      "relatedCodexIds": [],
+      "storyArc": "main-route"
+    }
+  ]
+}

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub DevOps Dashboard | Single Page Visualizer</title>
+
+  <!-- Google Fonts & Font Awesome Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Custom Glassmorphism Styles -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <div class="app-wrapper">
+
+    <!-- Top Header -->
+    <header class="app-header glass-panel">
+      <div class="brand-section">
+        <div class="brand-icon">
+          <i class="fa-solid fa-code-branch"></i>
+        </div>
+        <div class="brand-title">
+          <h1 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin: 0;">개발 에이전트 demo</h1>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <!-- Current Repository Badge -->
+        <div class="token-status" id="repoText">{{ owner }}/{{ repo }}</div>
+
+        <!-- Token Integration Status Indicator -->
+        <div class="token-status" id="tokenStatusIndicator">
+          {% if has_token %}
+            <span class="status-dot active"></span>
+            <span>.env 토큰 연동 중</span>
+          {% else %}
+            <span class="status-dot fallback"></span>
+            <span>Mock 데이터 모드</span>
+          {% endif %}
+        </div>
+
+        <!-- Manual Refresh Button -->
+        <button class="btn btn-secondary btn-icon" id="btnRefresh" title="데이터 새로고침">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
+
+        <!-- Settings Modal Trigger -->
+        <button class="btn btn-secondary btn-icon" id="btnOpenSettings" title="GitHub 연동 설정">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+
+        <!-- Theme Switcher Button -->
+        <button class="btn btn-secondary btn-icon" id="btnThemeToggle" title="테마 변경 (Dark/Light)">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs Bar -->
+    <nav class="nav-tabs-container">
+      <button class="tab-btn active" data-tab="tab-branches">
+        <i class="fa-solid fa-diagram-project"></i>
+        <span>브랜치 & PR 현황</span>
+        <span class="tab-badge" id="badgePrCount">0</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-issues">
+        <i class="fa-solid fa-circle-dot"></i>
+        <span>이슈 정리 & AI 요약</span>
+        <span class="tab-badge" id="badgeIssueCount">0</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-deployments">
+        <i class="fa-solid fa-rocket"></i>
+        <span>배포 현황 & 파이프라인</span>
+        <span class="tab-badge" id="badgeDeployCount">0</span>
+      </button>
+    </nav>
+
+    <!-- MAIN CONTENT TAB PANELS -->
+    <main>
+
+      <!-- ========================================== -->
+      <!-- TAB 1: BRANCHES & PULL REQUESTS VISUALIZER -->
+      <!-- ========================================== -->
+      <section class="tab-content active" id="tab-branches">
+        
+        <!-- KPI Summary Cards -->
+        <div class="kpi-grid">
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>활성 브랜치</span>
+              <div class="kpi-value" id="kpiBranchesCount">0</div>
+            </div>
+            <div class="kpi-icon blue"><i class="fa-solid fa-code-branch"></i></div>
+          </div>
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>Open Pull Requests</span>
+              <div class="kpi-value" id="kpiOpenPrs">0</div>
+            </div>
+            <div class="kpi-icon purple"><i class="fa-solid fa-code-pull-request"></i></div>
+          </div>
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>리뷰 대기 상태</span>
+              <div class="kpi-value" id="kpiPendingReviews">0</div>
+            </div>
+            <div class="kpi-icon amber"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          </div>
+        </div>
+
+        <!-- Unified Linear Git Trace & Branch Cards Directory Section -->
+        <div class="glass-panel">
+          <div class="section-header">
+            <div class="section-title">
+              <i class="fa-solid fa-diagram-nested"></i>
+              <span>Git 커밋 & 직선 브랜치 트레이스 (Full-Width Linear Directory Flow)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <span class="badge badge-open" id="branchStackCountBadge">0 Branches</span>
+              <span class="badge badge-merged" id="prListCountBadge">0 PRs</span>
+            </div>
+          </div>
+
+          <!-- Part 1: Pixel-Perfect SVG Git Tree Matrix with Branch Badges -->
+          <div class="git-tree-wrapper" style="border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem;">
+            
+            <div class="git-tree-layout-flex">
+              <!-- Left Side Branch Badges (built from live git_tree branches) -->
+              <div class="branch-pills-column" id="branchPillsColumn">
+                <!-- Rendered via main.js -->
+              </div>
+
+              <!-- Right Side Interactive Git Canvas -->
+              <div class="git-tree-canvas-container" id="gitTreeContainer">
+                <!-- Rendered via main.js -->
+              </div>
+            </div>
+            
+            <!-- Recent Commit Matrix Stream -->
+            <div class="commit-timeline-list" id="commitTimelineList" style="margin-top: 1rem;">
+              <!-- Rendered via main.js -->
+            </div>
+          </div>
+
+          <!-- Part 2: Integrated Branch Cards Stacked Directly Below -->
+          <div style="padding: 1.5rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+              <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-folder-tree" style="color: var(--primary);"></i>
+                <span>브랜치별 상세 카드 목록 (이어서 표시)</span>
+              </div>
+              <span style="font-size: 0.78rem; color: var(--text-dim); font-family: 'Fira Code', monospace;">Tree Guide Path: refs/heads/*</span>
+            </div>
+
+            <div class="branch-stack-container" id="branchStackContainer" style="display: flex; flex-direction: column; gap: 1rem;">
+              <!-- Rendered dynamically via main.js: Branch 1, Branch 2, Branch 3... -->
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 2: ISSUES SUMMARY & KANBAN MANAGEMENT -->
+      <!-- ========================================== -->
+      <section class="tab-content" id="tab-issues">
+        
+        <!-- KPI Summary Cards for Issues -->
+        <div class="kpi-grid">
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>전체 등록 이슈</span>
+              <div class="kpi-value" id="kpiTotalIssues">0</div>
+            </div>
+            <div class="kpi-icon blue"><i class="fa-solid fa-list-check"></i></div>
+          </div>
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>Open 이슈</span>
+              <div class="kpi-value" id="kpiOpenIssues">0</div>
+            </div>
+            <div class="kpi-icon amber"><i class="fa-solid fa-circle-exclamation"></i></div>
+          </div>
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>Closed 이슈</span>
+              <div class="kpi-value" id="kpiClosedIssues">0</div>
+            </div>
+            <div class="kpi-icon emerald"><i class="fa-solid fa-circle-check"></i></div>
+          </div>
+          <div class="glass-panel kpi-card">
+            <div class="kpi-info">
+              <span>P0 / 긴급 결함</span>
+              <div class="kpi-value" id="kpiCriticalIssues">0</div>
+            </div>
+            <div class="kpi-icon rose"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          </div>
+        </div>
+
+        <!-- AI Issue Summary Overview Card -->
+        <div class="ai-summary-card" id="aiSummaryCard">
+          <div class="ai-summary-header">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>AI 이슈 통계 & 핵심 조치 사항 요약</span>
+          </div>
+          <div class="ai-summary-body" id="aiSummaryBody">
+            이슈 패칭 데이터를 바탕으로 조치가 필요한 핵심 우선순위를 분석하고 있습니다...
+          </div>
+          <ul class="ai-actions-list" id="aiActionsList">
+            <!-- AI recommended actions populated dynamically -->
+          </ul>
+        </div>
+
+        <!-- Issue Search & Kanban Filter Bar -->
+        <div class="glass-panel issue-controls-bar">
+          <div class="search-filter-box">
+            <div class="input-group">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" class="form-control" id="issueSearchInput" placeholder="이슈 제목, #번호, 키워드로 검색...">
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary active" id="btnKanbanView"><i class="fa-solid fa-table-columns"></i> 칸반 보드</button>
+            <button class="btn btn-secondary" id="btnChartToggle"><i class="fa-solid fa-chart-pie"></i> 라벨 통계</button>
+          </div>
+        </div>
+
+        <!-- Optional Label Chart Area -->
+        <div class="glass-panel hidden" id="labelChartWrapper" style="padding: 1.5rem; margin-bottom: 1rem;">
+          <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem;">
+            <i class="fa-solid fa-tags" style="color: var(--secondary);"></i> 이슈 라벨 분포 (Chart.js)
+          </h3>
+          <div style="max-width: 420px; margin: 0 auto; height: 260px;">
+            <canvas id="labelDistributionChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Kanban Board Columns -->
+        <div class="kanban-board-grid">
+          
+          <!-- Column 1: To Do -->
+          <div class="kanban-column">
+            <div class="column-header todo">
+              <span>📌 To Do / 백로그</span>
+              <span class="column-count" id="countTodo">0</span>
+            </div>
+            <div class="kanban-cards-wrapper" id="colTodo"></div>
+          </div>
+
+          <!-- Column 2: In Progress -->
+          <div class="kanban-column">
+            <div class="column-header in-progress">
+              <span>🚧 진행 중 (In Progress)</span>
+              <span class="column-count" id="countInProgress">0</span>
+            </div>
+            <div class="kanban-cards-wrapper" id="colInProgress"></div>
+          </div>
+
+          <!-- Column 3: Review -->
+          <div class="kanban-column">
+            <div class="column-header review">
+              <span>🔍 검토 / QA</span>
+              <span class="column-count" id="countReview">0</span>
+            </div>
+            <div class="kanban-cards-wrapper" id="colReview"></div>
+          </div>
+
+          <!-- Column 4: Done -->
+          <div class="kanban-column">
+            <div class="column-header done">
+              <span>✅ 완료 (Closed)</span>
+              <span class="column-count" id="countDone">0</span>
+            </div>
+            <div class="kanban-cards-wrapper" id="colDone"></div>
+          </div>
+
+        </div>
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 3: DEPLOYMENT STATUS & PIPELINE -->
+      <!-- ========================================== -->
+      <section class="tab-content" id="tab-deployments">
+        
+        <!-- Environment Container Cards Grid (#1, #2, #3) -->
+        <div class="env-cards-grid" id="envCardsGrid">
+          <!-- Container #1, #2, #3 cards rendered dynamically -->
+        </div>
+
+        <!-- Recent Deployment History & Log Actions -->
+        <div class="glass-panel">
+          <div class="section-header">
+            <div class="section-title">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+              <span>최근 배포 이력 (Deployment Logs & History)</span>
+            </div>
+          </div>
+          <div class="pr-list-container" id="deployHistoryList">
+            <!-- Deployment timeline items rendered dynamically -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- MODAL 1: SETTINGS MODAL (.env & GitHub Config) -->
+  <!-- ========================================== -->
+  <div class="modal-backdrop" id="modalSettings">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div style="font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-gear" style="color: var(--primary);"></i>
+          <span>GitHub 연동 & .env 설정</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.2rem;">
+        
+        <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); padding: 1rem; border-radius: var(--radius-sm); font-size: 0.85rem;">
+          <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i>
+          <strong>.env 파일 자동 불러오기</strong><br>
+          프로젝트 루트 디렉토리의 <code>.env</code> 파일에 입력된 토큰이 백엔드에서 활성화되며, 여기서 직접 대깃 레포지토리를 수정하거나 변경할 수도 있습니다.
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label style="font-size: 0.85rem; font-weight: 600;">GitHub Repository Owner</label>
+          <input type="text" class="form-control" id="inputOwner" placeholder="예: octocat 또는 조직명" value="{{ owner }}">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label style="font-size: 0.85rem; font-weight: 600;">GitHub Repository Name</label>
+          <input type="text" class="form-control" id="inputRepo" placeholder="예: Hello-World 또는 kosa-main" value="{{ repo }}">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label style="font-size: 0.85rem; font-weight: 600;">GitHub Personal Access Token (PAT)</label>
+          <input type="password" class="form-control" id="inputToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" value="">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+          <button class="btn btn-secondary" id="btnCancelSettings">취소</button>
+          <button class="btn btn-primary" id="btnSaveSettings"><i class="fa-solid fa-check"></i> 저장 및 연결 연동</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- MODAL 2: TERMINAL LOGS MODAL -->
+  <!-- ========================================== -->
+  <div class="modal-backdrop" id="modalLogs">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div style="font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-terminal" style="color: var(--success);"></i>
+          <span id="modalLogTitle">배포 실행 로그 (Deployment Terminal)</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" id="btnCloseLogs"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="terminal-window" id="terminalLogBody">
+        <!-- Terminal log output lines populated via JS -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- MODAL 3: COMMIT DETAILS MODAL -->
+  <!-- ========================================== -->
+  <div class="modal-backdrop" id="modalCommit">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div style="font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-code-commit" style="color: var(--primary);"></i>
+          <span>Commit 상세 정보</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" id="btnCloseCommitModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.04); padding: 0.8rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 0.8rem; color: var(--text-dim);">Commit SHA:</span>
+            <code style="color: var(--primary); font-family: 'Fira Code', monospace; font-size: 0.9rem;" id="modalCommitSha">a1b2c3d</code>
+          </div>
+          <button class="btn btn-secondary" id="btnCopySha" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">
+            <i class="fa-regular fa-copy"></i> SHA 복사
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.3rem;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">커밋 메시지 (Commit Message)</div>
+          <div style="font-size: 1.05rem; font-weight: 700; color: var(--text-main);" id="modalCommitMsg">
+            feat: implement OAuth2 JWT Token Refresh
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: rgba(0, 0, 0, 0.2); padding: 1rem; border-radius: var(--radius-sm);">
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">작성자 (Committer)</div>
+            <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-top: 0.2rem;" id="modalCommitAuthor">dev-lead</div>
+          </div>
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">소속 브랜치 (Branch)</div>
+            <div style="font-size: 0.9rem; font-weight: 600; color: var(--secondary); margin-top: 0.2rem;" id="modalCommitBranch">main</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem;">수정된 파일 목록 (Changed Files)</div>
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; font-family: 'Fira Code', monospace; font-size: 0.82rem;" id="modalCommitFiles">
+            <div style="display: flex; justify-content: space-between;"><span>main.py</span><span class="diff-stat"><span class="diff-add">+35</span> <span class="diff-del">-12</span></span></div>
+            <div style="display: flex; justify-content: space-between;"><span>templates/index.html</span><span class="diff-stat"><span class="diff-add">+120</span> <span class="diff-del">-45</span></span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+          <a href="#" target="_blank" class="btn btn-primary" id="modalCommitGithubUrl">
+            <i class="fa-brands fa-github"></i> GitHub에서 커밋 Diff 보기 ↗
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Entry point -->
+  <script src="/static/js/main.js"></script>
+
+</body>
+</html>
