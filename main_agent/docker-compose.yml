@@ -28,14 +28,24 @@ services:
         condition: service_started
       dev-agent:
         condition: service_started
-      game-qa-agent:
-        condition: service_started
 
   workmate-agent:
     build: ../workmate-agent
     expose: ["8001"]
+    # OPENAI_API_KEY 등 실 Provider 자격 증명은 workmate-agent 자체 .env를
+    # 그대로 재사용한다 - 이 Compose의 .env는 Main Agent 설정만 갖고 있다.
+    env_file:
+      - "../workmate-agent/.env"
     environment:
       WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
+      APP_BASE_URL: "http://workmate-agent:8001/a2a"
+    # NOTE: her feat/workmate-ui-port branch also adds GOOGLE_TOKEN_FILE + volume
+    # mounts here for a Calendar/Gmail live-signal feature (daily_briefing), backed
+    # by code in workflows/daily_briefing.py + load_google_credentials() and a
+    # .runtime/ SQLite path. None of that exists yet in this repo's ../workmate-agent
+    # checkout (.env.example here only documents WORKMATE_SERVICE_TOKEN/APP_BASE_URL) -
+    # that's a newer version of her separate workmate-agent repo. Pull that in
+    # separately, then re-add the GOOGLE_TOKEN_FILE env var + volumes block.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
       interval: 5s
