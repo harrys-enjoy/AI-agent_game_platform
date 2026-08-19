@@ -3,9 +3,6 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
-    # Reuse Cat's server-side NVIDIA model settings without copying the API key.
-    env_file:
-      - "../Catalog & Manual(Game project)/.env"
     environment:
       LIVE_AGENT_DISCOVERY: "true"
       AGENT_REGISTRY: "workmate-agent,video-agent,dev-agent,game-qna-agent"
@@ -29,15 +26,35 @@ services:
         condition: service_started
       dev-agent:
         condition: service_started
-      game-qa-agent:
-        condition: service_started
 
   workmate-agent:
-    build: ../workmate-agent-main
+    build: ../workmate-agent
     expose: ["8001"]
+    # OPENAI_API_KEY 등 실 Provider 자격 증명은 workmate-agent 자체 .env를
+    # 그대로 재사용한다 - 이 Compose의 .env는 Main Agent 설정만 갖고 있다.
+    env_file:
+      - "../workmate-agent/.env"
     environment:
       WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
       APP_BASE_URL: "http://workmate-agent:8001/a2a"
+      # 컨테이너 안에서는 `Path(__file__).resolve().parents[3]` 기반 기본 토큰 경로
+      # 추정(`app/workflows/daily_briefing.py`)이 리포 레이아웃과 안 맞아 항상 빗나간다 —
+      # 아래 볼륨 마운트 경로를 명시적으로 지정한다(2026-08-18, 일정·메일 신호 0건 원인).
+      GOOGLE_TOKEN_FILE: "/app/google-oauth-test/token.json"
+    # 컨테이너를 새로 띄울 때마다 비어 있는 SQLite가 새로 생겨 daily_briefing 등이 항상 빈
+    # 결과만 반환하던 문제(2026-08-18) 대응 — 로컬에서 `python -m app.server`로 직접 실행
+    # 중인 workmate-agent(Workmate 어시스턴트 위젯이 붙는 그 인스턴스)와 같은 `.runtime/`
+    # SQLite 파일(사용자·Task·A2A Task Store 등)을 그대로 공유한다. 두 프로세스가 동시에 같은
+    # 파일에 쓸 수 있어(로컬 dev 서버가 떠 있는 동안) SQLite 파일 잠금 경합이 드물게 생길 수
+    # 있으나, 데모 목적의 로컬 공유이므로 감수한다 — 운영에서는 Postgres(`DATABASE_URL`)로
+    # 교체해야 한다. Google Calendar/Gmail 라이브 신호도 같은 이유로 로컬 `google-oauth-test/`
+    # OAuth 토큰(refresh_token 포함)을 그대로 공유한다 — `load_google_credentials()`가 만료 시
+    # 자동 갱신하며 같은 파일에 새 토큰을 다시 써서(`token_path.write_text`), 로컬 프로세스와
+    # 이 컨테이너 둘 다 갱신된 토큰을 공유하게 된다. refresh_token 자체가 완전히 폐기(재인증
+    # 필요)되는 경우에만 `google-oauth-test/`에서 다시 로그인해야 한다.
+    volumes:
+      - "../workmate-agent/.runtime:/app/.runtime"
+      - "../google-oauth-test/token.json:/app/google-oauth-test/token.json"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
       interval: 5s
@@ -60,16 +77,6 @@ services:
       AGENT_NAME: dev-agent
       AGENT_PORT: "8003"
       CARD_FILE: /app/cards/dev-agent.json
-
-  game-qa-agent:
-    build: "../Catalog & Manual(Game project)"
-    expose: ["3000"]
-    env_file:
-      - "../Catalog & Manual(Game project)/.env"
-    environment:
-      PORT: "3000"
-      AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
-      MAIN_AGENT_URL: "http://main-agent:8000"
 
 networks:
   default:

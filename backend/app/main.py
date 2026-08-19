@@ -52,11 +52,22 @@ class ChatMessageRequest(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     session_id: str | None = None
+    # `chat_reply()`가 돌려준 `pending_action`(확인이 필요한 동작)을 메시지와 함께
+    # 저장해 두면, 탭 전환·새로고침으로 대화가 이 이력에서 다시 만들어질 때도 확인/취소
+    # 버튼을 다시 그릴 수 있다(2026-08-19, `ChatReplyRequest.confirmed_skill_id`와 짝).
+    pending_action: dict[str, Any] | None = None
 
 
 class ChatReplyRequest(BaseModel):
     content: str
     owner: str = "미지정"
+    # workmate-agent(`assistant_ask`)가 확인이 필요한 동작(예: `analyze_meeting`)을
+    # 골랐을 때 `pending_action`으로 돌려준 skill_id/arguments를 그대로 되실어 보내면
+    # `assistant_router.py::assistant_ask_workflow()`가 route()를 다시 안 묻고 그
+    # Skill을 실제로 실행한다 — Drawer의 확인 배너와 같은 재전송 계약이다(20번 문서
+    # G5 대응, 2026-08-19). 채팅 UI가 "확인" 버튼을 누를 때만 채워 보낸다.
+    confirmed_skill_id: str | None = None
+    confirmed_arguments: dict[str, Any] | None = None
 
 
 class VideoPromptHandoffRequest(BaseModel):
@@ -206,7 +217,7 @@ def build_agent_request(agent_name: str, message: str, mode: str | None = None) 
         "system_prompt": get_agent_system_prompt(agent_name),
     }
     if agent_name == "workmate-agent":
-        request["skill_id"] = "daily_briefing"
+        request["skill_id"] = "assistant_ask"
     if mode is not None:
         request["mode"] = mode
     return request
@@ -248,7 +259,7 @@ def list_agents() -> list[AgentCard]:
 
 
 @app.get("/api/chats/{agent_name}/messages")
-def list_chat_messages(agent_name: str, session_id: str | None = None) -> list[dict[str, str]]:
+def list_chat_messages(agent_name: str, session_id: str | None = None) -> list[dict[str, Any]]:
     return conversation_store.list_messages(agent_name, session_id)
 
 
@@ -264,8 +275,8 @@ def reset_chat_session(agent_name: str) -> dict[str, str]:
 
 
 @app.post("/api/chats/{agent_name}/messages", status_code=201)
-def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str, str]:
-    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id)
+def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str, Any]:
+    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id, pending_action=payload.pending_action)
 
 
 @app.post("/api/chats/{agent_name}/reply")
@@ -284,6 +295,12 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if command and command["kind"] == "help":
         return {"answer": "사용 가능한 Game Q&A 명령어: " + ", ".join(command["commands"]), "agent": card_name, "status": "succeeded"}
     request = build_agent_request(card_name, game_qna_agent_message(command) if command else payload.content)
+    request["owner"] = payload.owner
+    if payload.confirmed_skill_id:
+        # 확인 버튼 재전송 — Data Part에 그대로 실어 workmate-agent가 route()를
+        # 다시 안 묻고 바로 실행하게 한다(위 `ChatReplyRequest` 참고).
+        request["confirmed_skill_id"] = payload.confirmed_skill_id
+        request["confirmed_arguments"] = payload.confirmed_arguments or {}
     if card_name == "game-qna-agent":
         request["mode"] = command["mode"] if command else "lore"
     try:
@@ -309,12 +326,25 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if card_name == "game-qna-agent" and not answer.startswith("[Source:"):
         source_label = GAME_QNA_SOURCE_LABELS.get(effective_mode, "Source: Game Q&A")
         answer = f"[{source_label}]\n{answer}"
+    pending_action = result.get("pending_action")
+    if pending_action and not (isinstance(pending_action, dict) and pending_action.get("skill_id")):
+        # `pending_action`은 있지만 프론트가 재전송에 필요한 `skill_id`를 읽을 수
+        # 없는 모양이면(예상 밖 응답) 버튼을 못 그려주니, 예전처럼 텍스트 안내로만
+        # 폴백한다 — 문구는 `workmate-agent/tools/m51_legacy_adapter.py::
+        # _PENDING_ACTION_NOTICE`와 같다.
+        answer = f"{answer}\n\n(이 요청은 실행 확인이 필요합니다 — Workmate 화면에서 직접 진행해 주세요.)"
+        pending_action = None
     response_body = {
         "answer": answer,
         "agent": card_name,
         "mode": effective_mode,
         "command": command.get("command") if command and command["kind"] == "request" else None,
         "status": result.get("status", "succeeded"),
+        # `assistant_ask`가 확인이 필요한 동작을 골랐을 때의 {skill_id, arguments} —
+        # 채팅 UI가 이 값을 그대로 `ChatReplyRequest.confirmed_skill_id`/
+        # `confirmed_arguments`에 실어 재전송하면 실제로 실행된다(위 참고,
+        # 2026-08-19 G5 대응: 확인/취소 버튼).
+        "pending_action": pending_action,
     }
     now = datetime.now(ZoneInfo("Asia/Seoul"))
     task_log_store.append(

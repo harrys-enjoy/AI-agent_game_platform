@@ -22,8 +22,13 @@ import TaskLogPanel from "./TaskLogPanel";
 const API_BASE_URL = "http://127.0.0.1:8000";
 type Task = { id: string; name: string; owner: string; status: string; agent: string };
 type ChatTask = { id: string; chat: string; title: string; status: "working" | "done" | "error"; hidden: boolean };
-type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] };
-type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string };
+// `assistant_ask`(workmate-agent)가 확인이 필요한 동작(예: analyze_meeting)을
+// 골랐을 때 돌려주는 {skill_id, arguments} — 사용자가 "확인"을 누르면 이 값을
+// 그대로 `ChatReplyRequest.confirmed_skill_id`/`confirmed_arguments`에 실어
+// 재전송한다(20번 문서 G5 대응, 2026-08-19).
+type PendingAction = { skill_id: string; arguments: Record<string, unknown> };
+type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] } | { id: string; kind: "pending-action"; action: PendingAction; chatName: string; text: string; state: "pending" | "confirming" | "done" | "cancelled" | "error" };
+type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string; pending_action?: PendingAction | null };
 const legacySections = ["Today Briefing", "Weekly Report", "Policies"];
 const chats = ["Workmate AI", "Video Generation", "Development Assistant", "Game Q&A"];
 const statuses = ["Ready to start", "In Progress", "Done", "Stuck", "Waiting for review"];
@@ -32,6 +37,31 @@ const initialTasks: Task[] = [
   { id: "2", name: "영상 기획 초안 생성", owner: "T", status: "In Progress", agent: "Video Generation" },
   { id: "3", name: "PR 변경사항 검토", owner: "", status: "Ready to start", agent: "Development Assistant" },
 ];
+
+// 저장된 대화 이력을 화면 `ChatMessage[]`로 되살린다. `pending_action`이 있는 assistant
+// 메시지라도 **세션의 마지막 메시지일 때만** 확인/취소 카드로 되살린다 — 그 뒤에 이미
+// 다른 메시지(확인 결과·취소 안내 등)가 쌓였다면 이미 처리된 요청이라는 뜻이라 평문으로만
+// 보여준다(두 번 실행되는 사고를 막는다, 2026-08-19). 카드를 다시 그리려면 재전송에 쓸
+// 원래 요청 문장이 필요한데, 저장 당시의 `text`를 따로 안 남겼으므로 바로 앞 user 메시지를
+// 그 문장으로 재사용한다(`submit()`이 카드를 만들 때와 같은 값).
+function rebuildChatFromHistory(messages: StoredMessage[], chatName: string): ChatMessage[] {
+  const lastIndex = messages.length - 1;
+  return messages.map((item, index) => {
+    if (item.role === "assistant" && index === lastIndex && item.pending_action?.skill_id) {
+      const previousUser = [...messages.slice(0, index)].reverse().find((entry) => entry.role === "user");
+      return { id: item.id, kind: "pending-action", action: { skill_id: item.pending_action.skill_id, arguments: item.pending_action.arguments ?? {} }, chatName, text: previousUser?.content ?? "", state: "pending" };
+    }
+    const prompt = chatName === "Game Q&A" && item.role === "assistant" ? extractArtPrompt(item.content) : null;
+    return { id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : prompt ? formatArtPromptForChat(prompt) : item.content };
+  });
+}
+
+// 확인 카드가 떠 있을 때(state="pending") 사용자가 짧게 긍정/부정만 답하면, 그걸 새 질문으로
+// 워크메이트에 보내는 대신 바로 그 카드의 확인/취소를 누른 것처럼 처리한다 — 이 채팅 경로는
+// 대화 이력을 워크메이트에 보내지 않아(20번 문서 참고) LLM에게 "응"이 뭘 가리키는지 판단하게
+// 맡길 수 없다. LLM을 타지 않는 결정론적 매칭이라 오탐 위험이 낮게 정확히 일치할 때만 잡는다.
+const PENDING_ACTION_CONFIRM_WORDS = new Set(["응", "네", "넵", "예", "확인", "좋아", "오케이", "ok", "okay", "yes", "y"]);
+const PENDING_ACTION_CANCEL_WORDS = new Set(["아니", "아니요", "아니오", "취소", "no", "n"]);
 
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
@@ -50,6 +80,15 @@ export default function App() {
   const [pendingArtPrompt, setPendingArtPrompt] = useState<ArtPrompt | null>(() => { try { return JSON.parse(window.localStorage.getItem("game-qna-art-prompt") ?? "null") as ArtPrompt | null; } catch { return null; } });
   const [artPromptTransferStatus, setArtPromptTransferStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [assigneeName, setAssigneeName] = useState(() => window.localStorage.getItem("main-assignee") ?? assigneeOptions[0].name);
+  // 19번 문서 결정 4 — 회의 녹음 중 사이드바로 다른 화면/담당자로 이동하면
+  // WebSocket이 끊겨 서버가 그 시점까지 받은 Chunk로 세션을 자동 확정한다.
+  // `TaskQuickActions`가 녹음 시작/종료를 여기로 올려보내고, 아래 이동 핸들러들이
+  // 이 플래그를 보고 확인창을 띄운다("Workmate AI" 탭 내부 이동은 TaskQuickActions가
+  // 자체적으로 같은 확인창을 띄우니 여기선 안 겹친다).
+  const [isRecordingMeeting, setIsRecordingMeeting] = useState(false);
+  function confirmLeaveRecording(): boolean {
+    return !isRecordingMeeting || window.confirm("녹음 중입니다. 이동하면 녹음이 종료됩니다. 이동할까요?");
+  }
   const [assignments, setAssignments] = useState<AssigneeAssignments>(() => { try { return { ...defaultAssignments, ...JSON.parse(window.localStorage.getItem("assignee-assignments") ?? "{}") }; } catch { return defaultAssignments; } });
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
@@ -145,13 +184,13 @@ export default function App() {
     setChat([]);
     fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/session`)
       .then((response) => response.ok ? response.json() as Promise<{ session_id: string; messages: StoredMessage[] }> : Promise.reject(new Error("Chat history failed")))
-      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentChat]: session.session_id })); setChat(session.messages.map((item) => { const prompt = currentChat === "Game Q&A" && item.role === "assistant" ? extractArtPrompt(item.content) : null; return { id: item.id, kind: "text", text: item.role === "user" ? `You: ${item.content}` : prompt ? formatArtPromptForChat(prompt) : item.content }; })); } })
+      .then((session) => { if (!cancelled) { setChatSessions((items) => ({ ...items, [currentChat]: session.session_id })); setChat(rebuildChatFromHistory(session.messages, currentChat)); } })
       .catch(() => { if (!cancelled) setChat([]); });
     return () => { cancelled = true; };
   }, [currentChat]);
 
-  function persistMessage(role: "user" | "assistant", content: string) {
-    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: currentSessionId }) }).catch(() => undefined);
+  function persistMessage(role: "user" | "assistant", content: string, pendingAction?: PendingAction | null) {
+    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: currentSessionId, pending_action: pendingAction ?? null }) }).catch(() => undefined);
   }
 
   function routeBriefingRequest(request: string) {
@@ -195,13 +234,13 @@ export default function App() {
     setChat([]);
   }
 
-  function handleSectionClick(section: string) { const state = section === "Today Briefing" || section === "Weekly Report" ? { activeSection: section, activeChat: null } : selectMenu({ type: "section", id: section }); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
+  function handleSectionClick(section: string) { if (!confirmLeaveRecording()) return; const state = section === "Today Briefing" || section === "Weekly Report" ? { activeSection: section, activeChat: null } : selectMenu({ type: "section", id: section }); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
   function activateChatTask(chatName: string) { setChatTasks((items) => { const existing = items.find((item) => item.chat === chatName); const next = existing ? items.map((item) => item.id === existing.id ? { ...item, hidden: false, status: "done" as const } : item) : [...items, { id: `chat-task-${Date.now()}`, chat: chatName, title: `${chatName} 작업`, status: "done" as const, hidden: false }]; window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
   function startChatTask(chatName: string) { setChatTasks((items) => { const next = items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "working" as const } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
   function completeChatTask(chatName: string) { setChatTasks((items) => { const next = items.map((item) => item.chat === chatName && !item.hidden ? { ...item, status: "done" as const } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
   function hideChatTask(taskId: string) { setChatTasks((items) => { const next = items.map((item) => item.id === taskId ? { ...item, hidden: true } : item); window.localStorage.setItem("ai-chat-tasks", JSON.stringify(next)); return next; }); }
-  function handleChatClick(chatName: string) { activateChatTask(chatName); const state = selectMenu({ type: "chat", id: chatName }, activeSection); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
-  function changeAssignee(name: string) { setAssigneeName(name); window.localStorage.setItem("main-assignee", name); activeChatRef.current = "Workmate AI"; setActiveSection("Today Briefing"); setActiveChat(null); }
+  function handleChatClick(chatName: string) { if (!confirmLeaveRecording()) return; activateChatTask(chatName); const state = selectMenu({ type: "chat", id: chatName }, activeSection); activeChatRef.current = state.activeChat ?? "Workmate AI"; setActiveSection(state.activeSection); setActiveChat(state.activeChat); }
+  function changeAssignee(name: string) { if (!confirmLeaveRecording()) return; setAssigneeName(name); window.localStorage.setItem("main-assignee", name); activeChatRef.current = "Workmate AI"; setActiveSection("Today Briefing"); setActiveChat(null); }
   function saveAssignments(next: AssigneeAssignments) { setAssignments(next); window.localStorage.setItem("assignee-assignments", JSON.stringify(next)); }
   function confirmReport() { activeChatRef.current = currentAssignee.chat; setActiveSection("Home"); setActiveChat(currentAssignee.chat); }
   function selectQuickAction(prompt: string) { setActiveSection("Home"); setActiveChat("Workmate AI"); activeChatRef.current = "Workmate AI"; setMessage(prompt); }
@@ -278,6 +317,43 @@ export default function App() {
 
   function cancelProposal(proposalId: string) { setChat((items) => items.map((item) => item.id === proposalId && item.kind === "proposal" ? { ...item, state: "cancelled" } : item)); persistMessage("assistant", "Task addition cancelled."); }
 
+  async function confirmPendingAction(actionId: string) {
+    const item = chat.find((entry) => entry.id === actionId);
+    if (!item || item.kind !== "pending-action" || item.state !== "pending") return;
+    setChat((items) => items.map((entry) => entry.id === actionId && entry.kind === "pending-action" ? { ...entry, state: "confirming" } : entry));
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(item.chatName)}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: item.text, owner: assigneeName, confirmed_skill_id: item.action.skill_id, confirmed_arguments: item.action.arguments }),
+      });
+      if (!response.ok) throw new Error(`Agent reply failed (${response.status})`);
+      const data = await response.json() as { answer?: string; pending_action?: { skill_id?: string; arguments?: Record<string, unknown> } | null };
+      const reply = data.answer || "실행됐습니다.";
+      // 방금 실행한 Skill(예: analyze_meeting) 결과가 또 다른 확인을 요구할 수 있다 —
+      // 예를 들어 분석 뒤 "이 Action Item을 할 일로 추가할까요?"(review_action_items)가
+      // 이어 붙는 경우. 이때도 텍스트로만 끝내지 않고 새 확인 카드를 이어 붙인다(2026-08-19,
+      // 실사용 중 "응"에 아무 반응이 없던 문제의 원인).
+      const nextPendingAction: PendingAction | null = data.pending_action?.skill_id
+        ? { skill_id: data.pending_action.skill_id, arguments: data.pending_action.arguments ?? {} }
+        : null;
+      persistMessage("assistant", reply, nextPendingAction);
+      const nextPendingActionMessage: ChatMessage | null = nextPendingAction
+        ? { id: `pending-action-${Date.now()}`, kind: "pending-action", action: nextPendingAction, chatName: item.chatName, text: item.text, state: "pending" }
+        : null;
+      setChat((items) => [
+        ...items.map((entry): ChatMessage => entry.id === actionId && entry.kind === "pending-action" ? { ...entry, state: "done" as const } : entry),
+        { id: `confirmed-${Date.now()}`, kind: "text", text: reply },
+        ...(nextPendingActionMessage ? [nextPendingActionMessage] : []),
+      ]);
+    } catch {
+      setChat((items) => items.map((entry) => entry.id === actionId && entry.kind === "pending-action" ? { ...entry, state: "error" } : entry));
+      persistMessage("assistant", "실행에 실패했습니다. 다시 시도해 주세요.");
+    }
+  }
+
+  function cancelPendingAction(actionId: string) { setChat((items) => items.map((entry) => entry.id === actionId && entry.kind === "pending-action" ? { ...entry, state: "cancelled" } : entry)); persistMessage("assistant", "요청을 취소했습니다."); }
+
   async function uploadSceneFix(messageId: string, taskId: string, sceneId: string, file: File) {
     setChat((items) => items.map((item) => item.id === messageId && item.kind === "unresolved-scenes" ? { ...item, scenes: markSceneStatus(item.scenes, sceneId, "uploading") } : item));
     try {
@@ -304,6 +380,22 @@ export default function App() {
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!message.trim()) return;
     const request = message.trim(); setMessage("");
+    // 화면에 확인 카드가 떠 있는 상태(state="pending")에서 짧은 긍정/부정만 답하면, 새
+    // 질문으로 보내는 대신 그 카드의 확인/취소를 누른 것처럼 처리한다(위
+    // `PENDING_ACTION_CONFIRM_WORDS`/`PENDING_ACTION_CANCEL_WORDS` 주석 참고).
+    const lastChatItem = chat[chat.length - 1];
+    if (lastChatItem?.kind === "pending-action" && lastChatItem.state === "pending") {
+      const normalized = request.toLowerCase();
+      const isConfirm = PENDING_ACTION_CONFIRM_WORDS.has(normalized);
+      const isCancel = !isConfirm && PENDING_ACTION_CANCEL_WORDS.has(normalized);
+      if (isConfirm || isCancel) {
+        setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }]);
+        persistMessage("user", request);
+        if (isConfirm) void confirmPendingAction(lastChatItem.id);
+        else cancelPendingAction(lastChatItem.id);
+        return;
+      }
+    }
     const gameQnaCommand = currentChat === "Game Q&A" ? resolveChatCommand(request) : null;
     if (currentChat === "Game Q&A") {
       if (gameQnaCommand?.kind === "help") {
@@ -362,7 +454,7 @@ export default function App() {
         }
         throw new Error(detail);
       }
-      const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[] };
+      const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[]; pending_action?: { skill_id?: string; arguments?: Record<string, unknown> } | null };
       const rawReply = data.answer || createChatReply(request);
       const artPrompt = responseChat === "Game Q&A" ? extractArtPrompt(rawReply) : null;
       const reply = artPrompt ? formatArtPromptForChat(artPrompt) : rawReply;
@@ -371,11 +463,24 @@ export default function App() {
         setArtPromptTransferStatus("idle");
         window.localStorage.setItem("game-qna-art-prompt", JSON.stringify(artPrompt));
       }
-      persistMessage("assistant", reply);
+      // `assistant_ask`가 확인이 필요한 동작을 골랐으면(예: analyze_meeting) 텍스트
+      // 답 뒤에 확인/취소 카드를 이어 붙인다 — "확인"을 누르면 원래 요청 문장(`request`)
+      // 을 `confirmed_skill_id`/`confirmed_arguments`와 함께 그대로 재전송한다. 이
+      // `pending_action`을 `reply`와 같은 저장 메시지에 함께 실어 보내야, 탭 전환·새로고침
+      // 뒤에도 `rebuildChatFromHistory()`가 이 카드를 되살릴 수 있다.
+      const normalizedPendingAction: PendingAction | null = data.pending_action?.skill_id
+        ? { skill_id: data.pending_action.skill_id, arguments: data.pending_action.arguments ?? {} }
+        : null;
+      persistMessage("assistant", reply, normalizedPendingAction);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       const textMessage: ChatMessage = { id: `response-${Date.now()}`, kind: "text", text: reply };
+      const pendingActionMessage: ChatMessage | null = normalizedPendingAction
+        ? { id: `pending-action-${Date.now()}`, kind: "pending-action", action: normalizedPendingAction, chatName: responseChat, text: request, state: "pending" }
+        : null;
       if (data.taskId && data.unresolvedScenes?.length) {
         setChat((items) => [...items, textMessage, { id: `unresolved-${Date.now()}`, kind: "unresolved-scenes", taskId: data.taskId!, scenes: buildUnresolvedScenes(data.unresolvedScenes!) }]);
+      } else if (pendingActionMessage) {
+        setChat((items) => [...items, textMessage, pendingActionMessage]);
       } else {
         setChat((items) => [...items, textMessage]);
       }
@@ -393,6 +498,7 @@ export default function App() {
 
   function renderChatMessage(item: ChatMessage) {
     if (item.kind === "text") return <p className="chat-answer" key={item.id}>{item.text}</p>;
+    if (item.kind === "pending-action") return <div className={`proposal-card ${item.state}`} key={item.id}><strong>실행 확인 필요</strong><div className="proposal-row"><span>Skill</span><b>{item.action.skill_id}</b></div>{item.state === "pending" && <div className="proposal-actions"><button type="button" className="save-task" onClick={() => void confirmPendingAction(item.id)}>확인</button><button type="button" className="cancel-task" onClick={() => cancelPendingAction(item.id)}>취소</button></div>}{item.state === "confirming" && <small>실행 중...</small>}{item.state === "done" && <small className="proposal-success">실행 완료.</small>}{item.state === "cancelled" && <small>요청을 취소했습니다.</small>}{item.state === "error" && <small className="proposal-error">실행에 실패했습니다. 다시 시도해 주세요.</small>}</div>;
     if (item.kind === "unresolved-scenes") return <div className="proposal-card unresolved-scenes-card" key={item.id}><strong>수동 수정이 필요한 장면</strong>{item.scenes.map((scene) => <div className="unresolved-scene-row" key={scene.sceneId}><img className="unresolved-scene-thumb" src={scene.imageUrl} alt={scene.sceneId} /><div className="unresolved-scene-info"><b>{scene.sceneId}</b><ul>{scene.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>{scene.status === "pending" && <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadSceneFix(item.id, item.taskId, scene.sceneId, file); event.target.value = ""; }} />}{scene.status === "uploading" && <small>업로드 중...</small>}{scene.status === "error" && <small className="unresolved-scene-error">업로드 실패. 다시 시도해 주세요.</small>}</div></div>)}</div>;
     return <div className={`proposal-card ${item.state}`} key={item.id}><strong>Task proposal</strong><div className="proposal-row"><span>Task</span><b>{item.proposal.name}</b></div><div className="proposal-row"><span>Owner</span><b>{item.proposal.owner}</b></div><div className="proposal-row"><span>Status</span><b>{item.proposal.status}</b></div><div className="proposal-row"><span>Agent</span><b>{item.proposal.agent}</b></div>{item.state === "pending" && <div className="proposal-actions"><button type="button" className="save-task" onClick={() => confirmProposal(item.id)}>Add Task</button><button type="button" className="cancel-task" onClick={() => cancelProposal(item.id)}>Cancel</button></div>}{item.state === "adding" && <small>Adding task...</small>}{item.state === "added" && <small className="proposal-success">Task added to Project Task.</small>}{item.state === "cancelled" && <small>Task addition cancelled.</small>}{item.state === "error" && <small className="proposal-error">Task could not be added. Check the API connection.</small>}</div>;
   }
@@ -403,7 +509,7 @@ export default function App() {
 
   const referenceReportKind = activeSection === "Today Briefing" ? "briefing" : activeSection === "Weekly Report" ? "weekly" : null;
 
-  return <div className={`shell legacy-ui ${activeChat ? "chat-active agent-content-updated" : "section-active"}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant="legacy" activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant="updated" currentChat={activeChat} onSelect={selectQuickAction} />{activeChat === "Video Generation" && <div className="video-agent-host"><VideoAgentPage initialBrief={message} /></div>}{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
+  return <div className={`shell legacy-ui ${activeChat ? "chat-active agent-content-updated" : "section-active"}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant="legacy" activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant="updated" currentChat={activeChat} onSelect={selectQuickAction} assigneeName={assigneeName} onRecordingChange={setIsRecordingMeeting} />{activeChat === "Video Generation" && <div className="video-agent-host"><VideoAgentPage initialBrief={message} /></div>}{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
     <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{legacySections.map((item) => <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item === "Today Briefing" ? "오늘 브리핑" : item === "Weekly Report" ? "주간 업무보고" : item}</button>)}<><button className="nav works-toggle" type="button" aria-expanded={worksOpen} onClick={() => setWorksOpen((open) => !open)}>◇ Works <span>{worksOpen ? "▾" : "▸"}</span></button>{worksOpen && <div className="nested-links">{chats.map((item) => <button className={`nested-link ${activeChat === item ? "active" : ""}`} type="button" onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</div>}<hr /><button className="section-toggle" type="button" aria-expanded={aiChatsOpen} onClick={() => setAiChatsOpen((open) => !open)}><small>Agent Work</small><span>{aiChatsOpen ? "▾" : "▸"}</span></button>{aiChatsOpen && <div className="nested-links task-links">{chatTasks.filter((task) => !task.hidden).map((task) => <div className="nested-task-row" key={task.id}><button className="nested-task" type="button" onClick={() => handleChatClick(task.chat)}><span className={task.status === "working" ? "task-working-dot" : "task-done-space"}>{task.status === "working" ? "○" : ""}</span>{task.title}</button><button className="nested-task-delete" type="button" aria-label={`${task.title} 삭제`} onClick={() => hideChatTask(task.id)}>×</button></div>)}</div>}</> <AssigneeSwitcher name={assigneeName} onChange={changeAssignee} assignments={assignments} onSaveAssignments={saveAssignments} /></aside>
     {activeChat !== "Video Generation" && <><main className="workspace">{activeSection === "Policies" && !activeChat ? renderPolicies() : <><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>PROJECT_DEMO</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel recentGameQnaWork={recentGameQnaWork} artPrompt={pendingArtPrompt} artPromptTransferStatus={artPromptTransferStatus} onSendArtPromptToVideo={() => void sendArtPromptToVideo()} /></>}</main>
     <aside className="chat-panel"><h3>AI Chat · {currentChat}<button className="reset-chat" type="button" onClick={() => void resetChat()}>Reset chat</button>{currentChat === "Game Q&A" && <button className="story-toggle" type="button" onClick={() => setIsStoryFormOpen((value) => !value)}>{isStoryFormOpen ? "Close" : "+ Add story"}</button>}</h3>{currentChat === "Game Q&A" && isStoryFormOpen && <form className="story-form" onSubmit={addStory}><input value={storyName} onChange={(event) => setStoryName(event.target.value)} placeholder="Story title" required /><input value={storyKeywords} onChange={(event) => setStoryKeywords(event.target.value)} placeholder="Keywords, comma separated" required /><textarea value={storyAnswer} onChange={(event) => setStoryAnswer(event.target.value)} placeholder="Story content" rows={5} required /><button type="submit">Save story</button>{storyNotice && <small>{storyNotice}</small>}</form>}{currentChat === "Game Q&A" && showCommandHelp && <div className="command-help" role="dialog" aria-label="Game Q&A commands"><div className="command-help-heading"><strong>Game Q&A 명령어</strong><button type="button" className="command-help-close" onClick={() => setShowCommandHelp(false)}>닫기</button></div>{commandCatalog.map((item) => <button type="button" className="command-item" key={item.command} onClick={() => selectGameQaCommand(item.command)}><strong>{item.command}</strong><span>{item.label} · {item.description}</span></button>)}</div>}<div className="messages" ref={messagesRef}>{chat.length ? chat.map(renderChatMessage) : <div className="empty">Type a message to start a conversation</div>}</div><form className="composer" onSubmit={submit}><input value={message} onChange={(event) => { setMessage(event.target.value); if (currentChat === "Game Q&A" && (event.target.value === "/" || event.target.value.startsWith("/?") || event.target.value.startsWith("/help"))) setShowCommandHelp(true); }} onKeyDown={(event) => { if (event.key === "Escape") setShowCommandHelp(false); }} placeholder={currentChat === "Game Q&A" ? "Type /? for Game Q&A commands..." : "Type a message..."} /><button type="submit">➤</button></form></aside></>}
