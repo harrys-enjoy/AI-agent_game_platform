@@ -28,7 +28,8 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         onChange={(event) => setBrief(event.target.value)}
         placeholder="브리프 (필수)"
         aria-label="브리프"
-        className="min-h-16 rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        className="min-h-16 rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
+        disabled={disabled}
       />
       <input
         value={durationSec}
@@ -36,13 +37,15 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         placeholder="길이(초)"
         aria-label="길이(초)"
         inputMode="numeric"
-        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
+        disabled={disabled}
       />
       <select
         value={preset}
         onChange={(event) => setPreset(event.target.value)}
         aria-label="프리셋"
-        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
+        disabled={disabled}
       >
         <option value="">프리셋 선택 안 함</option>
         <option value="이벤트">이벤트</option>
@@ -53,7 +56,8 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         value={sceneType}
         onChange={(event) => setSceneType(event.target.value)}
         aria-label="씬 종류"
-        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
+        disabled={disabled}
       >
         <option value="">씬 종류 선택 안 함</option>
         <option value="인게임">인게임</option>
@@ -65,7 +69,8 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         placeholder="예산(달러)"
         aria-label="예산(달러)"
         inputMode="decimal"
-        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        className="rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
+        disabled={disabled}
       />
       <button
         type="submit"

@@ -12,6 +12,8 @@ const LABELS: Record<TaskState, string> = {
   TASK_STATE_REJECTED: "거부됨",
 };
 
+const TERMINAL_STATES: TaskState[] = ["TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_REJECTED"];
+
 const DOT_COLORS: Record<TaskState, string> = {
   TASK_STATE_SUBMITTED: "text-brief-accent",
   TASK_STATE_WORKING: "text-brief-accent",
@@ -27,9 +29,10 @@ export function StatusBadge({ state, startedAt }: { state: TaskState; startedAt:
   const [elapsedSec, setElapsedSec] = useState(() => Math.floor((Date.now() - startedAt) / 1000));
 
   useEffect(() => {
+    if (TERMINAL_STATES.includes(state)) return;
     const interval = setInterval(() => setElapsedSec(Math.floor((Date.now() - startedAt) / 1000)), 1000);
     return () => clearInterval(interval);
-  }, [startedAt]);
+  }, [startedAt, state]);
 
   return (
     <div

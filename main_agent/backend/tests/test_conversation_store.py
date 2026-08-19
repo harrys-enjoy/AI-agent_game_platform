@@ -19,3 +19,13 @@ def test_messages_are_isolated_by_agent_and_persist_after_reopen(tmp_path):
 
     reopened = ConversationStore(str(db_path))
     assert len(reopened.list_messages("Workmate AI")) == 2
+
+
+def test_messages_are_isolated_by_owner_and_agent(tmp_path):
+    store = ConversationStore(str(tmp_path / "owner-conversations.db"))
+
+    store.append("Workmate AI", "user", "owner-a message", owner="Owner A")
+    store.append("Workmate AI", "user", "owner-b message", owner="Owner B")
+
+    assert [item["content"] for item in store.list_messages("Workmate AI", owner="Owner A")] == ["owner-a message"]
+    assert [item["content"] for item in store.list_messages("Workmate AI", owner="Owner B")] == ["owner-b message"]

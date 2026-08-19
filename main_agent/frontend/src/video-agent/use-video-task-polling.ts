@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getVideoAgentTask } from "./api";
+import { getVideoAgentTask, VideoAgentTaskNotFoundError } from "./api";
 import type { Task, TaskState } from "./types";
 
 const POLL_INTERVAL_MS = 5000;
@@ -10,6 +10,7 @@ export type PollingState = {
   task: Task | null;
   reconnecting: boolean;
   error: string | null;
+  notFound: boolean;
   resumePolling: () => void;
 };
 
@@ -17,6 +18,7 @@ export function useVideoTaskPolling(taskId: string | null): PollingState {
   const [task, setTask] = useState<Task | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [resumeSignal, setResumeSignal] = useState(0);
   const failureCountRef = useRef(0);
 
@@ -25,9 +27,11 @@ export function useVideoTaskPolling(taskId: string | null): PollingState {
       setTask(null);
       setReconnecting(false);
       setError(null);
+      setNotFound(false);
       return;
     }
     failureCountRef.current = 0;
+    setNotFound(false);
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -43,6 +47,12 @@ export function useVideoTaskPolling(taskId: string | null): PollingState {
         if (!paused) timer = setTimeout(poll, POLL_INTERVAL_MS);
       } catch (err) {
         if (cancelled) return;
+        if (err instanceof VideoAgentTaskNotFoundError) {
+          setReconnecting(false);
+          setError(err.message);
+          setNotFound(true);
+          return;
+        }
         failureCountRef.current += 1;
         if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
           setReconnecting(false);
@@ -66,5 +76,5 @@ export function useVideoTaskPolling(taskId: string | null): PollingState {
     setResumeSignal((n) => n + 1);
   }
 
-  return { task, reconnecting, error, resumePolling };
+  return { task, reconnecting, error, notFound, resumePolling };
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { UnresolvedScene } from "../resume-utils";
 import type { Task } from "./types";
 
@@ -9,6 +10,8 @@ type Props = {
 };
 
 export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: Props) {
+  const [showDetail, setShowDetail] = useState(false);
+
   if (!task) {
     return (
       <div className="flex h-full items-center justify-center text-brief-muted" data-testid="canvas-idle">
@@ -64,17 +67,27 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
     const videoUrl = task.artifacts
       ?.flatMap((artifact) => artifact.parts)
       .find((part) => typeof part.data?.output_video_url === "string")?.data?.output_video_url as string | undefined;
-    return videoUrl ? (
-      <video src={videoUrl} controls className="max-h-full rounded-[15px]" data-testid="canvas-completed" />
-    ) : (
-      <div data-testid="canvas-completed-no-video">완료되었지만 영상 URL을 찾을 수 없습니다.</div>
+    return (
+      <div className="flex flex-col items-center gap-3">
+        {videoUrl ? (
+          <video src={videoUrl} controls className="max-h-[70vh] max-w-full rounded-[15px]" data-testid="canvas-completed" />
+        ) : (
+          <div data-testid="canvas-completed-no-video">완료되었지만 영상 URL을 찾을 수 없습니다.</div>
+        )}
+        <button type="button" onClick={onRetry} className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white">
+          새로 생성
+        </button>
+      </div>
     );
   }
 
-  const failureReason = task.status.message?.parts
+  const parts = task.status.message?.parts ?? [];
+  const failureReason = parts[0]?.text;
+  const technicalDetail = parts
+    .slice(1)
     .map((part) => part.text)
     .filter(Boolean)
-    .join("\n");
+    .join("\n\n");
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3" data-testid="canvas-error">
@@ -84,6 +97,25 @@ export function TaskCanvas({ task, unresolvedScenes, onUploadScene, onRetry }: P
         </p>
       )}
       <p className="text-brief-text">{state === "TASK_STATE_CANCELED" ? "취소되었습니다." : "생성에 실패했습니다."}</p>
+      {technicalDetail && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowDetail((value) => !value)}
+            className="text-sm text-brief-muted underline"
+          >
+            {showDetail ? "자세히 숨기기" : "자세히 보기"}
+          </button>
+          {showDetail && (
+            <pre
+              data-testid="canvas-error-detail"
+              className="max-h-64 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-brief-border bg-brief-bg p-3 text-left text-xs text-brief-muted"
+            >
+              {technicalDetail}
+            </pre>
+          )}
+        </>
+      )}
       <button type="button" onClick={onRetry} className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white">
         다시 시도
       </button>

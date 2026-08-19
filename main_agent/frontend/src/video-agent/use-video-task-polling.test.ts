@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVideoTaskPolling } from "./use-video-task-polling";
 import * as api from "./api";
+import { VideoAgentTaskNotFoundError } from "./api";
 import type { Task } from "./types";
 
 function task(state: Task["status"]["state"]): Task {
@@ -82,6 +83,20 @@ describe("useVideoTaskPolling", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     await waitFor(() => expect(result.current.error).toBe("network down"));
+  });
+
+  it("stops polling permanently and surfaces an error when the task is not found (stale/orphaned task)", async () => {
+    const spy = vi.spyOn(api, "getVideoAgentTask").mockRejectedValue(new VideoAgentTaskNotFoundError("video-agent task not found: task_1"));
+    const { result } = renderHook(() => useVideoTaskPolling("task_1"));
+
+    await waitFor(() => expect(result.current.error).toBe("video-agent task not found: task_1"));
+    expect(result.current.reconnecting).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20000);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("resets failure count when taskId changes", async () => {

@@ -12,9 +12,9 @@ class A2AClient:
     def __init__(
         self,
         transport: httpx.AsyncBaseTransport | None = None,
-        timeout: float = 5.0,
+        timeout: float = 600.0,
         poll_interval: float = 1.0,
-        poll_timeout: float = 30.0,
+        poll_timeout: float = 600.0,
     ):
         self.transport = transport
         self.timeout = timeout

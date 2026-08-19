@@ -27,4 +27,20 @@ describe("StatusBadge", () => {
     });
     expect(screen.getByTestId("status-badge")).toHaveTextContent("3s");
   });
+
+  it("freezes the elapsed-time counter once the task reaches a terminal state", () => {
+    const startedAt = Date.now();
+    const { rerender } = render(<StatusBadge state="TASK_STATE_WORKING" startedAt={startedAt} />);
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByTestId("status-badge")).toHaveTextContent("5s");
+
+    rerender(<StatusBadge state="TASK_STATE_COMPLETED" startedAt={startedAt} />);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByTestId("status-badge")).toHaveTextContent("5s");
+  });
 });

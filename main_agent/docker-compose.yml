@@ -43,16 +43,16 @@ services:
       retries: 10
       start_period: 5s
 
-  # ponytail: video-agent real source (../video_agent) needs a Gemini API key we don't
-  # have yet, so it stays on the mock-agents stand-in. Switch build to ../video_agent
-  # and add GEMINI_API_KEY once the key is issued.
   video-agent:
-    build: ./mock-agents
-    expose: ["8002"]
-    environment:
-      AGENT_NAME: video-agent
-      AGENT_PORT: "8002"
-      CARD_FILE: /app/cards/video-agent.json
+    build: ../video_agent
+    ports:
+      - "8002:8002"
+    # GEMINI_API_KEY / VEO_API_KEY / LTX_API_KEY / VIDEO_SERVICE_TOKEN all come
+    # from .env. Host port is mapped (not just `expose`) so MEDIA_PUBLIC_BASE_URL
+    # links (default http://localhost:8002) resolve from a browser, not just
+    # container-to-container.
+    env_file:
+      - .env
 
   dev-agent:
     build: ../dev_agent

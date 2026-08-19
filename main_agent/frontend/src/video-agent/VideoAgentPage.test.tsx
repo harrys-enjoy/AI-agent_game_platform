@@ -110,6 +110,50 @@ describe("VideoAgentPage", () => {
     await waitFor(() => expect(screen.getByTestId("submit-error")).toHaveTextContent("video-agent task cancel failed: HTTP 400"));
   });
 
+  it("clears a stale persisted task from localStorage once the server reports it as not found", async () => {
+    window.localStorage.setItem("video-agent-active-task", JSON.stringify({ taskId: "task_stale", startedAt: Date.now() }));
+    vi.spyOn(api, "getVideoAgentTask").mockRejectedValue(new api.VideoAgentTaskNotFoundError("video-agent task not found: task_stale"));
+
+    render(<VideoAgentPage />);
+
+    await waitFor(() => expect(screen.getByTestId("polling-error")).toHaveTextContent("video-agent task not found: task_stale"));
+    expect(window.localStorage.getItem("video-agent-active-task")).toBeNull();
+  });
+
+  it("shows a cancel button while a task needs a manual fix, and reflects the canceled state after canceling", async () => {
+    vi.spyOn(api, "createVideoAgentTask").mockResolvedValue({
+      task: { id: "task_1", contextId: "ctx_1", status: { state: "TASK_STATE_WORKING" } },
+    });
+    const getTask = vi.spyOn(api, "getVideoAgentTask");
+    getTask.mockResolvedValueOnce({
+      id: "task_1",
+      contextId: "ctx_1",
+      status: {
+        state: "TASK_STATE_INPUT_REQUIRED",
+        unresolvedScenes: [{ sceneId: "scene_04", imageUrl: "http://x/s4.png", issues: ["too wide"] }],
+      },
+    });
+    vi.spyOn(api, "cancelVideoAgentTask").mockResolvedValue({
+      id: "task_1",
+      contextId: "ctx_1",
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    getTask.mockResolvedValueOnce({
+      id: "task_1",
+      contextId: "ctx_1",
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+
+    render(<VideoAgentPage />);
+    await userEvent.type(screen.getByLabelText("영상 브리프"), "할로윈 이벤트 영상 15초");
+    await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));
+
+    await waitFor(() => expect(screen.getByTestId("scene-card-scene_04")).toBeVisible());
+    await userEvent.click(screen.getByRole("button", { name: "취소" }));
+
+    await waitFor(() => expect(screen.getByTestId("canvas-error")).toHaveTextContent("취소되었습니다."));
+  });
+
   it("disables the composer immediately on submit, before the first poll response lands", async () => {
     let resolveCreate: (value: Awaited<ReturnType<typeof api.createVideoAgentTask>>) => void = () => {};
     vi.spyOn(api, "createVideoAgentTask").mockReturnValue(
@@ -132,5 +176,19 @@ describe("VideoAgentPage", () => {
 
     resolveCreate({ task: { id: "task_1", contextId: "ctx_1", status: { state: "TASK_STATE_WORKING" } } });
     await waitFor(() => expect(screen.getByTestId("canvas-working")).toBeVisible());
+  });
+
+  it("shows the Main Agent page title above the two-panel layout", () => {
+    render(<VideoAgentPage />);
+    expect(screen.getByText("MAIN AGENT / VIDEO GENERATION")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "영상 생성" })).toBeInTheDocument();
+  });
+
+  it("does not stretch the two-panel layout to the full viewport height", () => {
+    const { container } = render(<VideoAgentPage />);
+    const grid = container.querySelector(".grid");
+    expect(grid).not.toHaveClass("h-full");
+    expect(container.querySelector("aside")).toHaveClass("min-h-[520px]");
+    expect(container.querySelector("main")).toHaveClass("min-h-[520px]");
   });
 });

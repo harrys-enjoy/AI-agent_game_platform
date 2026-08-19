@@ -1,6 +1,9 @@
+import json
 import os
 import re
+from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
@@ -16,6 +19,7 @@ from .orchestrator import Orchestrator
 from .registry import AgentRegistry
 from .router import RouterLLM
 from .task_store import TaskStore
+from .task_log_store import TaskLogStore
 from . import video_agent_client
 
 
@@ -33,23 +37,33 @@ app.add_middleware(
     allow_headers=["content-type", "authorization"],
 )
 store = TaskStore("main_agent.db")
+task_log_store = TaskLogStore("main_agent.db")
 conversation_store = ConversationStore("main_agent.db")
 registry: AgentRegistry
 router = RouterLLM()
 
+# video-agent's real pipeline can take several minutes per render (observed ~373s
+# for a 16s clip) - the default poll_timeout=30.0 was tuned for the fast mock
+# stand-in and kills any real generation routed through the shared chat panel or
+# /api/tasks with a spurious TimeoutError while the render is still in progress.
+A2A_POLL_TIMEOUT_SECONDS = float(os.environ.get("A2A_POLL_TIMEOUT_SECONDS", "600"))
+
 
 class TaskRequest(BaseModel):
     request: str
+    owner: str = "미지정"
 
 
 class ChatMessageRequest(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     session_id: str | None = None
+    owner: str = "default"
 
 
 class ChatReplyRequest(BaseModel):
     content: str
+    owner: str = "미지정"
 
 
 class VideoPromptHandoffRequest(BaseModel):
@@ -71,6 +85,7 @@ class StoryCreateRequest(BaseModel):
 class StoryDraftRequest(StoryCreateRequest):
     relatedLoreIds: list[str] = Field(default_factory=list)
     relatedCodexIds: list[str] = Field(default_factory=list)
+    owner: str = "미지정"
 
 
 class StoryApproveRequest(BaseModel):
@@ -235,6 +250,10 @@ def build_agent_request(agent_name: str, message: str, mode: str | None = None) 
     return request
 
 
+def display_agent_name(agent_name: str) -> str:
+    return next((label for label, key in CHAT_AGENT_NAMES.items() if key == agent_name), agent_name)
+
+
 registry = AgentRegistry.from_environment(os.environ)
 
 
@@ -249,7 +268,7 @@ async def send_art_prompt_to_video(payload: VideoPromptHandoffRequest) -> dict:
     live_cards = await registry.refresh() if os.getenv("LIVE_AGENT_DISCOVERY", "false").lower() == "true" else {}
     card = live_cards.get("video-agent", configured_card)
     try:
-        result = await A2AClient().send_message(
+        result = await A2AClient(poll_timeout=A2A_POLL_TIMEOUT_SECONDS).send_message(
             card.url,
             build_video_handoff_request(payload.art_prompt),
             headers=registry.headers("video-agent"),
@@ -267,24 +286,24 @@ def list_agents() -> list[AgentCard]:
 
 
 @app.get("/api/chats/{agent_name}/messages")
-def list_chat_messages(agent_name: str, session_id: str | None = None) -> list[dict[str, str]]:
-    return conversation_store.list_messages(agent_name, session_id)
+def list_chat_messages(agent_name: str, session_id: str | None = None, owner: str = "default") -> list[dict[str, str]]:
+    return conversation_store.list_messages(agent_name, session_id, owner)
 
 
 @app.get("/api/chats/{agent_name}/session")
-def get_chat_session(agent_name: str) -> dict:
-    session_id = conversation_store.current_session(agent_name)
-    return {"session_id": session_id, "messages": conversation_store.list_messages(agent_name, session_id)}
+def get_chat_session(agent_name: str, owner: str = "default") -> dict:
+    session_id = conversation_store.current_session(agent_name, owner)
+    return {"session_id": session_id, "messages": conversation_store.list_messages(agent_name, session_id, owner)}
 
 
 @app.post("/api/chats/{agent_name}/reset")
-def reset_chat_session(agent_name: str) -> dict[str, str]:
-    return {"session_id": conversation_store.reset(agent_name)}
+def reset_chat_session(agent_name: str, owner: str = "default") -> dict[str, str]:
+    return {"session_id": conversation_store.reset(agent_name, owner)}
 
 
 @app.post("/api/chats/{agent_name}/messages", status_code=201)
 def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str, str]:
-    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id)
+    return conversation_store.append(agent_name, payload.role, payload.content, payload.session_id, payload.owner)
 
 
 @app.post("/api/chats/{agent_name}/reply")
@@ -298,7 +317,7 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
 
     live_cards = await registry.refresh() if os.getenv("LIVE_AGENT_DISCOVERY", "false").lower() == "true" else {}
     card = live_cards.get(card_name, configured_card)
-    client = A2AClient() if live_cards else LocalClient()
+    client = A2AClient(poll_timeout=A2A_POLL_TIMEOUT_SECONDS) if live_cards else LocalClient()
     command = parse_game_qna_command(payload.content) if card_name == "game-qna-agent" else None
     if command and command["kind"] == "help":
         return {"answer": "사용 가능한 Game Q&A 명령어: " + ", ".join(command["commands"]), "agent": card_name, "status": "succeeded"}
@@ -335,12 +354,45 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
         "command": command.get("command") if command and command["kind"] == "request" else None,
         "status": result.get("status", "succeeded"),
     }
+    now = datetime.now(ZoneInfo("Asia/Seoul"))
+    task_log_store.append(
+        agent=display_agent_name(card_name),
+        task_name=payload.content.strip(),
+        owner=payload.owner,
+        status="완료" if response_body["status"] == "succeeded" else "실패",
+        result_summary=answer[:240],
+        recorded_at=now,
+        reset_id=task_log_store.current_reset_id(work_date=now.date().isoformat()),
+    )
     task = result.get("task") or {}
     unresolved_scenes = (task.get("status") or {}).get("unresolvedScenes")
     if unresolved_scenes:
         response_body["taskId"] = task.get("id")
         response_body["unresolvedScenes"] = unresolved_scenes
     return response_body
+
+
+@app.get("/api/policies/task-logs")
+def list_task_logs(
+    work_date: str,
+    owner: str | None = None,
+    agent: str | None = None,
+    reset_id: str | None = None,
+    offset: int = 0,
+    limit: int = 30,
+) -> dict:
+    logs = task_log_store.list_logs(work_date=work_date, owner=owner, agent=agent, reset_id=reset_id, offset=offset, limit=limit)
+    return {"items": logs, "next_offset": offset + len(logs) if len(logs) == min(max(limit, 1), 100) else None}
+
+
+@app.get("/api/policies/task-log-owners")
+def list_task_log_owners() -> list[str]:
+    return task_log_store.owners()
+
+
+@app.post("/api/policies/task-logs/reset", status_code=201)
+def reset_task_logs(work_date: str) -> dict:
+    return task_log_store.reset(work_date=work_date)
 
 
 @app.post("/api/route")
@@ -367,22 +419,37 @@ async def post_catalog(path: str, payload: dict) -> dict:
 
 @app.post("/api/stories/review")
 async def review_story(payload: StoryDraftRequest) -> dict:
-    return await post_catalog("/api/story-review", payload.model_dump())
+    reviewed = await post_catalog("/api/story-review", payload.model_dump(exclude={"owner"}))
+    now = datetime.now(ZoneInfo("Asia/Seoul"))
+    task_log_store.append(agent="Game Q&A", task_name=f"스토리 검토: {payload.name}", owner=payload.owner, status="검토 중", result_summary="RPG 스토리 검토를 실행했습니다.", recorded_at=now, reset_id=task_log_store.current_reset_id(work_date=now.date().isoformat()))
+    return reviewed
 
 
 @app.post("/api/stories/approve", status_code=201)
 async def approve_story(payload: StoryApproveRequest) -> dict:
-    return await post_catalog("/api/story-approve", payload.model_dump())
+    return await post_catalog("/api/story-approve", {"reviewId": payload.reviewId, "draft": payload.draft.model_dump(exclude={"owner"})})
 
 
 @app.post("/api/tasks", status_code=202)
 async def create_task(payload: TaskRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
     live_cards = await registry.refresh() if os.getenv("LIVE_AGENT_DISCOVERY", "false").lower() == "true" else {}
     active_cards = list(live_cards.values()) or cards
-    client = A2AClient() if live_cards else LocalClient()
+    client = A2AClient(poll_timeout=A2A_POLL_TIMEOUT_SECONDS) if live_cards else LocalClient()
     orchestrator = Orchestrator(client, store, router=router)
     selected = await orchestrator.select(payload.request, active_cards)
     task = store.create(payload.request, [card.name for card in selected])
+    now = datetime.now(ZoneInfo("Asia/Seoul"))
+    reset_id = task_log_store.current_reset_id(work_date=now.date().isoformat())
+    for card in selected:
+        task_log_store.append(
+            agent=display_agent_name(card.name),
+            task_name=payload.request,
+            owner=payload.owner,
+            status="진행 중",
+            result_summary="Task 실행을 시작했습니다.",
+            recorded_at=now,
+            reset_id=reset_id,
+        )
 
     async def run_existing() -> None:
         store.update(task.task_id, status="running")
@@ -396,13 +463,22 @@ async def create_task(payload: TaskRequest, background_tasks: BackgroundTasks) -
                 )
                 results.append(await orchestrator.client.send_message(card.url, request, headers=registry.headers(card.name)))
             store.update(task.task_id, status="succeeded", result={"results": results})
+            completed_at = datetime.now(ZoneInfo("Asia/Seoul"))
+            for card in selected:
+                task_log_store.append(agent=display_agent_name(card.name), task_name=payload.request, owner=payload.owner, status="완료", result_summary="Task 실행이 완료되었습니다.", recorded_at=completed_at, reset_id=task_log_store.current_reset_id(work_date=completed_at.date().isoformat()))
         except A2AError as exc:
             error = f"{exc.status}: {exc.message}"
             if exc.request_id:
                 error += f" (request_id={exc.request_id})"
             store.update(task.task_id, status="failed", result={"results": results}, error=error)
+            failed_at = datetime.now(ZoneInfo("Asia/Seoul"))
+            for card in selected:
+                task_log_store.append(agent=display_agent_name(card.name), task_name=payload.request, owner=payload.owner, status="실패", result_summary=error[:240], recorded_at=failed_at, reset_id=task_log_store.current_reset_id(work_date=failed_at.date().isoformat()))
         except Exception as exc:
             store.update(task.task_id, status="failed", result={"results": results}, error=str(exc))
+            failed_at = datetime.now(ZoneInfo("Asia/Seoul"))
+            for card in selected:
+                task_log_store.append(agent=display_agent_name(card.name), task_name=payload.request, owner=payload.owner, status="실패", result_summary=str(exc)[:240], recorded_at=failed_at, reset_id=task_log_store.current_reset_id(work_date=failed_at.date().isoformat()))
 
     background_tasks.add_task(run_existing)
     return {"task_id": task.task_id, "status": task.status}

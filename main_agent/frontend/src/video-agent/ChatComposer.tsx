@@ -15,9 +15,10 @@ export function ChatComposer({ disabled, onSubmit, initialValue }: { disabled: b
       <textarea
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="예: 할로윈 신규 캐릭터 공개 이벤트, 15초로 만들어줘"
-        className="min-h-24 rounded-[8px] border border-brief-border p-2 text-sm text-brief-text"
+        placeholder="무엇을 홍보할지 구체적으로 적어주세요 (캐릭터/이벤트/게임 장면 등, 30초 이하, 예산 $5 이하). 예: 할로윈 신규 캐릭터 '루멘' 공개 이벤트, 15초로"
+        className="min-h-24 rounded-[8px] border border-brief-border p-2 text-sm text-brief-text disabled:opacity-60"
         aria-label="영상 브리프"
+        disabled={disabled}
       />
       <button
         type="submit"
