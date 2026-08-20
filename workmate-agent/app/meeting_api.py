@@ -159,4 +159,3 @@ async def upload_recording(meeting_id: str, file: UploadFile = File(...), user_i
     record = meeting_repository().add_recording(RecordingRecord(str(uuid4()), meeting_id, user_id, file.filename or "recording", file.content_type, size, checksum, object_key))
     meeting_repository().set_source_audio_uri(meeting_id, user_id, object_key)
     return RecordingResponse.model_validate(record, from_attributes=True)
-

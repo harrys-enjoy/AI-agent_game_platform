@@ -1,0 +1,77 @@
+{
+  "jeonuchi-freedom": {
+    "en": { "name": "Jeon Woo-chi — The Wind Thief", "keywords": ["Jeon Woo-chi", "magic", "freedom", "shapeshifting"], "answer": "Jeon Woo-chi believes that when records and commands fail to protect the weak, people may deceive and break them. He exposes authority through magic and shapeshifting, rescuing individuals trapped outside the rules. His freedom can also leave disorder and responsibility behind." },
+    "ja": { "name": "チョン・ウチ — 風を盗む者", "keywords": ["チョン・ウチ", "道術", "自由", "変身"], "answer": "チョン・ウチは、記録や命令が弱者を守れないなら、それを欺き壊す権利があると信じる。道術と変身で権力者の嘘を暴き、規則の外に閉じ込められた個人を救う。しかし、その自由は混乱と責任を残すこともある。" },
+    "zh-CN": { "name": "田禹治——盗风之人", "keywords": ["田禹治", "道术", "自由", "变身"], "answer": "田禹治相信，如果记录和命令无法保护弱者，人们就有权欺骗并打破它们。他用道术和变身揭露权力者的谎言，先拯救被规则排斥的个人。但这种自由也可能留下混乱与责任。" }
+  },
+  "honggildong-order": {
+    "en": { "name": "Hong Gil-dong — Architect of a New Order", "keywords": ["Hong Gil-dong", "equality", "community", "order", "Yuldo"], "answer": "Hong Gil-dong believes discrimination cannot end through individual heroics alone. He builds a community and rules that protect everyone, abolishing birth records and redistributing resources. Yet rules meant to preserve equality may become surveillance and control." },
+    "ja": { "name": "ホン・ギルドン — 新しい秩序の設計者", "keywords": ["ホン・ギルドン", "平等", "共同体", "秩序", "ユルド"], "answer": "ホン・ギルドンは、個人の英雄的な行動だけでは差別を終わらせられないと考える。出生記録を廃止し、誰もが守られる共同体と制度を作る。しかし平等を守る規則は、監視と統制に変わる危険もある。" },
+    "zh-CN": { "name": "洪吉童——新秩序的设计者", "keywords": ["洪吉童", "平等", "共同体", "秩序", "律岛国"], "answer": "洪吉童认为，仅靠个人英雄无法结束歧视。他建立保护所有人的共同体和制度，废除出身记录并重新分配资源。但维护平等的规则也可能变成新的监视与控制。" }
+  },
+  "record-forgery-incident": {
+    "en": { "name": "The Forged Citizen Records Incident", "keywords": ["forged records", "citizen records", "exile"], "answer": "The ruling class altered citizen records and expelled an entire class from Glass Star. Jeon Woo-chi wants to open the archive and reveal everything, while Hong Gil-dong moves the victims to the Wind Community first. They share the same wound but disagree on the order of rescue and responsibility." },
+    "ja": { "name": "市民記録改ざん事件", "keywords": ["記録改ざん", "市民記録", "追放"], "answer": "ユリビョルの支配層が市民記録を改ざんし、ある階層を都市から追放した事件。チョン・ウチは記録庫を開いて真実を公開し、ホン・ギルドンは被害者を先に風の共同体へ移す。同じ傷を抱えながら、救済の順序と責任を異なる形で考える。" },
+    "zh-CN": { "name": "公民记录伪造事件", "keywords": ["记录伪造", "公民记录", "驱逐"], "answer": "统治阶层篡改公民记录，将一个阶层驱逐出玻璃星。田禹治想打开档案公开真相，洪吉童则先把受害者迁往风之共同体。他们面对同一创伤，却对救援顺序和责任有不同判断。" }
+  },
+  "wind-community": {
+    "en": { "name": "The Wind Community", "keywords": ["Wind Community", "new community", "self-rule"], "answer": "The Wind Community values choice and ability over birth records. Hong Gil-dong builds stable rules and resource sharing here, while Jeon Woo-chi argues that every rule must be challenged when it begins to bind people again." },
+    "ja": { "name": "風の共同体", "keywords": ["風の共同体", "新しい共同体", "自治"], "answer": "風の共同体は出生記録より選択と能力を重んじる。ホン・ギルドンは安定した規則と資源分配を築き、チョン・ウチは規則が再び人を縛るたびに揺さぶるべきだと主張する。" },
+    "zh-CN": { "name": "风之共同体", "keywords": ["风之共同体", "新共同体", "自治"], "answer": "风之共同体重视选择与能力，而不是出身记录。洪吉童在这里建立稳定的规则和资源分配，田禹治则认为规则一旦再次束缚人们，就必须被挑战。" }
+  },
+  "glass-star-heart": {
+    "en": { "name": "The Heart of Glass Star", "keywords": ["Heart of Glass Star", "memory device", "identity control"], "answer": "The Heart of Glass Star can bind every citizen's memory and identity record together. Jeon Woo-chi wants to destroy it so nobody owns another person's memory; Hong Gil-dong wants limited community oversight after removing discriminatory records." },
+    "ja": { "name": "ユリビョルの心臓", "keywords": ["ユリビョルの心臓", "記憶装置", "身分管理"], "answer": "ユリビョルの心臓は、市民の記憶と身分記録を一つに束ねる古代装置だ。チョン・ウチは破壊を望み、ホン・ギルドンは差別記録を消した後、共同体の安全のため限定管理しようとする。" },
+    "zh-CN": { "name": "玻璃星之心", "keywords": ["玻璃星之心", "记忆装置", "身份控制"], "answer": "玻璃星之心可以把所有公民的记忆与身份记录绑定在一起。田禹治想摧毁它，洪吉童则想删除歧视记录后，在共同体监督下有限管理。" }
+  },
+  "choice-axis-freedom-order": {
+    "en": { "name": "The Freedom–Order Choice Axis", "keywords": ["freedom and order", "choice", "truth", "stability"], "answer": "Choices are tracked as a balance between personal freedom and community stability, and between public truth and preventing chaos. Neither side is an absolute answer; every rescue also creates a new burden." },
+    "ja": { "name": "自由と秩序の選択軸", "keywords": ["自由と秩序", "選択", "真実", "安定"], "answer": "選択は善悪ではなく、個人の自由と共同体の安定、真実の公開と混乱の防止の均衡として記録される。どちらを選んでも救われる人と新たな負担を背負う人が生まれる。" },
+    "zh-CN": { "name": "自由与秩序的选择轴", "keywords": ["自由与秩序", "选择", "真相", "稳定"], "answer": "选择记录的是个人自由与共同体稳定、公开真相与避免混乱之间的平衡，而不是善恶分数。无论跟随哪一方，都会有人获救，也会有人承担新的负担。" }
+  },
+  "campaign-record-choice": {
+    "en": { "name": "Chapter 1 — One Incident, Two Solutions", "keywords": ["chapter 1", "two solutions", "campaign"], "answer": "When the citizen records are forged, Jeon Woo-chi opens the archive and reveals every name and lie. Hong Gil-dong hides part of the records until the victims are safe. The player chooses truth first or protection first." },
+    "ja": { "name": "第1章 — 同じ事件、異なる解決", "keywords": ["第1章", "異なる解決", "キャンペーン"], "answer": "市民記録が改ざんされる。チョン・ウチは記録庫を開き、すべての名前と嘘を公開する。ホン・ギルドンは被害者が安全になるまで一部の記録を隠す。プレイヤーは真実か保護を先に選ぶ。" },
+    "zh-CN": { "name": "第一章——同一事件，不同解法", "keywords": ["第一章", "不同解法", "战役"], "answer": "公民记录被伪造后，田禹治打开档案公开所有姓名与谎言。洪吉童则在受害者安全前隐藏部分记录。玩家要选择先公开真相，还是先保护人们。" }
+  },
+  "campaign-wind-thief": {
+    "en": { "name": "Chapter 2 — The Wind Thief and the Nation Builder", "keywords": ["chapter 2", "Wind Thief", "nation builder"], "answer": "Jeon Woo-chi steals the Wind Community's rules and publishes them, arguing that secrecy turns a refuge into a ruler. Hong Gil-dong replies that private rules can protect vulnerable people. The player defines the limits of transparency." },
+    "ja": { "name": "第2章 — 風の盗人と新しい国の設計者", "keywords": ["第2章", "風の盗人", "国の設計者"], "answer": "チョン・ウチは風の共同体の規則を盗み公開する。秘密が避難所を支配者に変えるという主張だ。ホン・ギルドンは非公開の規則も弱者を守ると反論する。" },
+    "zh-CN": { "name": "第二章——盗风者与新国度设计者", "keywords": ["第二章", "盗风者", "国度设计者"], "answer": "田禹治偷走并公开风之共同体的规则，认为秘密会让避难所变成统治者。洪吉童反驳说，未公开的规则也能保护弱者。玩家决定透明的边界。" }
+  },
+  "campaign-glass-heart": {
+    "en": { "name": "Chapter 3 — The Heart of Glass Star", "keywords": ["chapter 3", "Glass Star Heart", "memory"], "answer": "The two rivals discover the Heart of Glass Star. Jeon Woo-chi believes it must be destroyed so nobody is trapped by records; Hong Gil-dong believes it must be managed to remove discriminatory records." },
+    "ja": { "name": "第3章 — ユリビョルの心臓", "keywords": ["第3章", "ユリビョルの心臓", "記憶"], "answer": "二人は市民の記憶を管理できるユリビョルの心臓を発見する。チョン・ウチは破壊を、ホン・ギルドンは差別記録を消すための管理を望む。" },
+    "zh-CN": { "name": "第三章——玻璃星之心", "keywords": ["第三章", "玻璃星之心", "记忆"], "answer": "两人发现了可以控制公民记忆的玻璃星之心。田禹治主张摧毁它，洪吉童则主张管理它并删除歧视记录。" }
+  },
+  "campaign-choice-war": {
+    "en": { "name": "Chapter 4 — The War of Choices", "keywords": ["chapter 4", "war of choices", "decision"], "answer": "Cities split between the two methods. The player chooses between immediate rescue, long-term reform, public truth, and preventing chaos. No choice removes every form of harm." },
+    "ja": { "name": "第4章 — 選択の戦争", "keywords": ["第4章", "選択の戦争", "決断"], "answer": "ユリビョルの都市は二人の方法によって分裂する。プレイヤーは即時の救済、長期の制度改革、真実の公開、混乱の防止から優先順位を決める。" },
+    "zh-CN": { "name": "第四章——选择之战", "keywords": ["第四章", "选择之战", "决定"], "answer": "玻璃星的城市因两种方式而分裂。玩家要在立即救援、长期改革、公开真相和避免混乱之间作出选择。没有任何选择能消除所有伤害。" }
+  },
+  "campaign-no-good-evil": {
+    "en": { "name": "Chapter 5 — An Ending Without Good or Evil", "keywords": ["chapter 5", "no good or evil", "ending"], "answer": "The final chapter asks which risk the player will accept, not who is righteous. Jeon Woo-chi's freedom may leave disorder, while Hong Gil-dong's equality may harden into control." },
+    "ja": { "name": "第5章 — 善悪のない結末", "keywords": ["第5章", "善悪のない結末", "結末"], "answer": "最終章でプレイヤーは勝者ではなく、どの危険を受け入れるかを選ぶ。チョン・ウチの自由は混乱を、ホン・ギルドンの平等は統制を残す可能性がある。" },
+    "zh-CN": { "name": "第五章——没有善恶的结局", "keywords": ["第五章", "没有善恶的结局", "结局"], "answer": "最终章要求玩家选择愿意承担的风险，而不是判断谁正确。田禹治的自由可能留下混乱，洪吉童的平等也可能固化为控制。" }
+  },
+  "ending-jeonuchi": {
+    "en": { "name": "Jeon Woo-chi Ending — Open Skies", "keywords": ["Jeon Woo-chi ending", "open skies", "freedom ending"], "answer": "The Heart of Glass Star is destroyed and citizen records belong to no one. People can change names and travel freely, but each city must create its own promises, increasing both freedom and responsibility." },
+    "ja": { "name": "チョン・ウチ結末 — 開かれた空", "keywords": ["チョン・ウチ結末", "開かれた空", "自由の結末"], "answer": "ユリビョルの心臓は破壊され、市民記録は誰の所有でもなくなる。人々は自由に名を変え移動できるが、各都市が約束を作る責任を負う。" },
+    "zh-CN": { "name": "田禹治结局——开放的天空", "keywords": ["田禹治结局", "开放的天空", "自由结局"], "answer": "玻璃星之心被摧毁，公民记录不再属于任何人。人们可以自由改名和迁徙，但每座城市都必须自己建立约定，责任也随之增加。" }
+  },
+  "ending-honggildong": {
+    "en": { "name": "Hong Gil-dong Ending — Walls of Equality", "keywords": ["Hong Gil-dong ending", "walls of equality", "order ending"], "answer": "Hong Gil-dong places the Heart under community oversight and removes discriminatory records. Everyone receives legal protection, but some feel that safety records and surveillance restrict their freedom." },
+    "ja": { "name": "ホン・ギルドン結末 — 平等の城壁", "keywords": ["ホン・ギルドン結末", "平等の城壁", "秩序の結末"], "answer": "ホン・ギルドンは心臓を共同体の監視下に置き、差別記録を消す。全員が法の保護を受ける一方、安全のための記録と監視を自由の制限と感じる人も残る。" },
+    "zh-CN": { "name": "洪吉童结局——平等之墙", "keywords": ["洪吉童结局", "平等之墙", "秩序结局"], "answer": "洪吉童把玻璃星之心置于共同体监督下并删除歧视记录。所有人受到法律保护，但也有人认为安全记录与监视限制了自由。" }
+  },
+  "ending-cooperation": {
+    "en": { "name": "Cooperation Ending — Two Keys", "keywords": ["cooperation ending", "two keys", "compromise"], "answer": "The rivals split the Heart's control between two keys. Oversight protects freedom and opposing authority checks order, but the conflict continues through negotiation." },
+    "ja": { "name": "協力結末 — 二つの鍵", "keywords": ["協力結末", "二つの鍵", "妥協"], "answer": "チョン・ウチとホン・ギルドンは心臓を二つの鍵に分ける。自由を守る監視と秩序を検証する権限が生まれるが、対立は交渉として続く。" },
+    "zh-CN": { "name": "合作结局——两把钥匙", "keywords": ["合作结局", "两把钥匙", "妥协"], "answer": "田禹治与洪吉童把玻璃星之心分成两把钥匙。监督保护自由，反对权力约束秩序，但冲突仍会以谈判的形式继续。" }
+  },
+  "ending-independent": {
+    "en": { "name": "Independent Ending — Small Promises", "keywords": ["independent ending", "small promises", "self-rule"], "answer": "The player rejects both central solutions and lets each city create its own rules. Local freedom and stability grow, but the player must mediate conflicts between different rules." },
+    "ja": { "name": "独立結末 — 小さな約束", "keywords": ["独立結末", "小さな約束", "自治"], "answer": "プレイヤーは二人の中央集権的な解決を拒み、都市ごとに自治の規則を作る。地域の自由と安定は高まるが、異なる規則の衝突を調整する責任が残る。" },
+    "zh-CN": { "name": "独立结局——小小的约定", "keywords": ["独立结局", "小小的约定", "自治"], "answer": "玩家拒绝两人的中央方案，让每座城市建立自己的自治规则。地方自由与稳定提高，但玩家必须调解不同规则之间的冲突。" }
+  }
+}

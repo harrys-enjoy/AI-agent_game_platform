@@ -1,0 +1,32 @@
+{
+  "side-ashes-ledger": {
+    "en": { "name": "Ashes Ledger", "keywords": ["Ashes Ledger", "side story", "faction collapse"], "answer": "Ashes Ledger is a side story set after Jeon Woo-chi and Hong Gil-dong's factions collapse. Yeonhwa discovers that the final blank page of the ledger is meant to record the Unnamed Society itself." },
+    "ja": { "name": "灰の帳簿", "keywords": ["灰の帳簿", "外伝", "勢力の崩壊"], "answer": "『灰の帳簿』は、田禹治と洪吉童の勢力が崩壊した後を描く外伝です。蓮花は帳簿の最後の空白が、無名会自身を記録するためのものだと知ります。" },
+    "zh-CN": { "name": "灰烬账簿", "keywords": ["灰烬账簿", "外传", "势力覆灭"], "answer": "《灰烬账簿》讲述全禹治与洪吉童的势力崩溃之后的故事。莲花发现账簿最后的空白页，正是用来记录无名会自身的。" }
+  },
+  "side-unnamed-society": {
+    "en": { "name": "The Unnamed Society", "keywords": ["Unnamed Society", "third faction", "hero-free world"], "answer": "The Unnamed Society is made of people who belong to neither Jeon Woo-chi nor Hong Gil-dong. It wants no hero to hold absolute power, but its surveillance slowly turns it into another ruling force." },
+    "ja": { "name": "無名会", "keywords": ["無名会", "第三勢力", "英雄なき世界"], "answer": "無名会は田禹治にも洪吉童にも属さない人々の連合です。英雄が絶対的な権力を持つことを拒みますが、監視によって新たな支配者へ変わっていきます。" },
+    "zh-CN": { "name": "无名会", "keywords": ["无名会", "第三势力", "没有英雄的世界"], "answer": "无名会由不属于全禹治和洪吉童的人组成。他们拒绝让任何英雄掌握绝对权力，却在监视他人的过程中逐渐成为新的统治者。" }
+  },
+  "side-yeonhwa": {
+    "en": { "name": "Yeonhwa's Record", "keywords": ["Yeonhwa", "heroine", "fox bead", "third choice"], "answer": "Yeonhwa knows the secrets of Jeon Woo-chi's fox bead and the records left by Hong Gil-dong's new order. She does not become either hero's lover; she records all three factions' wrongs and makes them public." },
+    "ja": { "name": "蓮花の記録", "keywords": ["蓮花", "ヒロイン", "狐玉", "第三の選択"], "answer": "蓮花は田禹治の狐玉の秘密と、洪吉童の新しい秩序が残した記録を知っています。彼女はどちらの英雄の恋人にもならず、三つの勢力の過ちを記録して公開します。" },
+    "zh-CN": { "name": "莲花的记录", "keywords": ["莲花", "女主角", "狐珠", "第三种选择"], "answer": "莲花知道全禹治狐珠的秘密，也知道洪吉童新秩序留下的记录。她不成为任何一位英雄的恋人，而是记录并公开三方势力的错误。" }
+  },
+  "side-jeonuchi-fall": {
+    "en": { "name": "The Fall of Jeon Woo-chi's Faction", "keywords": ["Jeon Woo-chi faction", "fall of Jeon Woo-chi", "freedom corrupted"], "answer": "Jeon Woo-chi's faction fractures when some followers use freedom as a reason for raids and private revenge. Jeon Woo-chi destroys his symbols and leaves leadership behind." },
+    "ja": { "name": "田禹治勢力の崩壊", "keywords": ["田禹治勢力", "田禹治の没落", "自由の堕落"], "answer": "田禹治の勢力は、自由を理由に略奪と私的な復讐を始めた仲間たちによって分裂します。田禹治は自分の象徴を消し、指導者の座を去ります。" },
+    "zh-CN": { "name": "全禹治势力的覆灭", "keywords": ["全禹治势力", "全禹治的没落", "自由的堕落"], "answer": "全禹治的势力因部分成员以自由为名进行袭击和私刑而分裂。全禹治销毁自己的象征，放弃了领袖的位置。" }
+  },
+  "side-honggildong-fall": {
+    "en": { "name": "The Dissolution of Hong Gil-dong's Faction", "keywords": ["Hong Gil-dong faction", "fall of Hong Gil-dong", "order corrupted"], "answer": "Hong Gil-dong's rules for safety become surveillance and forced obedience. He exposes every record and seal, dissolves his organization, and lets local communities choose their own rules." },
+    "ja": { "name": "洪吉童勢力の解体", "keywords": ["洪吉童勢力", "洪吉童の没落", "秩序の堕落"], "answer": "洪吉童が安全のために作った規則は監視と服従の強制へ変わります。彼はすべての記録と印を公開し、組織を解体して地域共同体に選択を返します。" },
+    "zh-CN": { "name": "洪吉童势力的解体", "keywords": ["洪吉童势力", "洪吉童的没落", "秩序的堕落"], "answer": "洪吉童为安全建立的规则变成监视和强制服从。他公开全部记录和印章，解散组织，把选择权交还给各地共同体。" }
+  },
+  "side-third-banner": {
+    "en": { "name": "The Third Banner", "keywords": ["Third Banner", "Unnamed Society ending", "Yeonhwa's choice"], "answer": "After both factions fall, the Unnamed Society raises a third banner and begins watching every hero. Yeonhwa exposes the Society's own crimes, ensuring that no faction can own history." },
+    "ja": { "name": "第三の旗", "keywords": ["第三の旗", "無名会の結末", "蓮花の選択"], "answer": "二つの勢力が崩壊した後、無名会は第三の旗を掲げて英雄たちを監視します。蓮花は無名会自身の罪を公開し、どの勢力も歴史を独占できないようにします。" },
+    "zh-CN": { "name": "第三面旗帜", "keywords": ["第三面旗帜", "无名会结局", "莲花的选择"], "answer": "两方势力覆灭后，无名会升起第三面旗帜并监视所有英雄。莲花公开无名会自身的罪行，使任何势力都无法独占历史。" }
+  }
+}

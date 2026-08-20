@@ -52,6 +52,7 @@ services:
     environment:
       WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
       APP_BASE_URL: "http://workmate-agent:8001/a2a"
+      GOOGLE_CLIENT_SECRET_FILE: "/app/google-oauth-test/client_secret.json"
       # 컨테이너 안에서는 `Path(__file__).resolve().parents[3]` 기반 기본 토큰 경로 추정
       # (`app/workflows/daily_briefing.py`)이 리포 레이아웃과 안 맞아 항상 빗나간다.
       # google-oauth-test/token.json 자체는 지금 로컬에 없어서(disabled-for-test 파일만 있음)
@@ -66,6 +67,7 @@ services:
     # 쓰면 된다 - 다만 그 경로는 각자 로컬에서만 유효하므로 이 파일에 커밋하지 않는다.
     volumes:
       - "../workmate-agent/.runtime:/app/.runtime"
+      - "../workmate-agent/google-oauth-test:/app/google-oauth-test"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
       interval: 5s
@@ -98,7 +100,7 @@ services:
     build: "../qna_agent"
     expose: ["3000"]
     env_file:
-      - ".env"
+      - "../qna_agent/.env"
     environment:
       PORT: "3000"
       AGENT_PUBLIC_URL: "http://game-qa-agent:3000"

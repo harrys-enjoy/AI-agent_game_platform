@@ -13,11 +13,11 @@ describe("video-agent api", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await createVideoAgentTask("15초 이벤트 영상 만들어줘");
+    const result = await createVideoAgentTask("15초 이벤트 영상 만들어줘", "테스트 담당자");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/video-agent/tasks",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ message: "15초 이벤트 영상 만들어줘" }) }),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ message: "15초 이벤트 영상 만들어줘", owner: "테스트 담당자" }) }),
     );
     expect("task" in result && result.task.id).toBe("task_1");
   });

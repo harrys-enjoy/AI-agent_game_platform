@@ -1,4 +1,4 @@
-﻿"""M2.3 주간 보고서 공개 전송과 영속 Task 통합 검수."""
+"""M2.3 주간 보고서 공개 전송과 영속 Task 통합 검수."""
 
 from __future__ import annotations
 
@@ -46,4 +46,3 @@ class M23IntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

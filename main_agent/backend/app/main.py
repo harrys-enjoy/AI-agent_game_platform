@@ -106,6 +106,7 @@ class StoryApproveRequest(BaseModel):
 
 class VideoAgentTaskRequest(BaseModel):
     message: str
+    owner: str = "default"
 
 
 class LocalClient:
@@ -441,8 +442,11 @@ def catalog_base_url() -> str:
 
 async def post_catalog(path: str, payload: dict) -> dict:
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.post(f"{catalog_base_url()}{path}", json=payload)
+        token = os.getenv("GAME_QNA_SERVICE_TOKEN") or os.getenv("API_KEY")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        timeout = float(os.getenv("CATALOG_API_TIMEOUT_SECONDS", "45"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(f"{catalog_base_url()}{path}", json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
     except Exception as exc:
@@ -578,11 +582,22 @@ async def resume_video_scene(task_id: str, scene_id: str, file: UploadFile = Fil
 @app.post("/api/video-agent/tasks")
 async def create_video_agent_task(payload: VideoAgentTaskRequest) -> dict:
     try:
-        return await video_agent_client.send_message(registry, payload.message)
+        result = await video_agent_client.send_message(registry, payload.message)
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except (httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    now = datetime.now(ZoneInfo("Asia/Seoul"))
+    task_log_store.append(
+        agent="Video Generation",
+        task_name=payload.message.strip(),
+        owner=payload.owner,
+        status="진행 중",
+        result_summary="영상 생성 작업을 시작했습니다.",
+        recorded_at=now,
+        reset_id=task_log_store.current_reset_id(work_date=now.date().isoformat()),
+    )
+    return result
 
 
 @app.get("/api/video-agent/tasks/{task_id}")

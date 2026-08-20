@@ -1,4 +1,5 @@
 import { AppError } from './errors.js';
+import { normalizeLocale } from './locales.js';
 
 export const ALLOWED_MODES = new Set(['dev-guide', 'catalog', 'codex', 'lore']);
 const MAX_EVIDENCE_ITEMS = 5;
@@ -27,11 +28,15 @@ export function validateAskRequest(body) {
   if (question.length < 1 || question.length > 2000) {
     throw new AppError('INVALID_REQUEST', 'question은 1~2,000자여야 합니다.');
   }
+  const locale = normalizeLocale(body.locale);
+  if (!locale) {
+    throw new AppError('INVALID_REQUEST', 'locale??ko, en, ja, zh-CN 以묒뿉???섏뼱???⑸땲??');
+  }
   const context = body.context ?? {};
   if (!context || typeof context !== 'object' || Array.isArray(context)) {
     throw new AppError('INVALID_REQUEST', 'context는 JSON 객체여야 합니다.');
   }
-  return { mode: body.mode, question, context };
+  return { mode: body.mode, locale, question, context };
 }
 
 export function createRequestId() {
