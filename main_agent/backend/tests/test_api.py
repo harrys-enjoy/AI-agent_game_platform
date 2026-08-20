@@ -1,9 +1,11 @@
 ﻿from uuid import uuid4
 
 import httpx
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, task_log_store
 from app.main import build_video_handoff_request, game_qna_agent_message, parse_game_qna_command
 
 
@@ -68,6 +70,30 @@ def test_video_handoff_formats_the_art_prompt_as_a_korean_brief():
         "역할·갈등: 확인 필요"
     )
     assert request["context"] == {"source": "game-qna"}
+
+
+def test_video_generation_task_is_saved_to_the_operational_task_log(monkeypatch):
+    from app import main
+
+    async def fake_send_message(registry, message):
+        return {"task": {"id": "video-log-test"}}
+
+    monkeypatch.setattr(main.video_agent_client, "send_message", fake_send_message)
+    task_name = "운영원칙 영상 생성 기록 테스트"
+
+    response = TestClient(app).post(
+        "/api/video-agent/tasks",
+        json={"message": task_name, "owner": "테스트 담당자"},
+    )
+
+    assert response.status_code == 200
+    logs = task_log_store.list_logs(
+        work_date=datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat(),
+        owner="테스트 담당자",
+        agent="Video Generation",
+        limit=100,
+    )
+    assert any(log["task_name"] == task_name and log["status"] == "진행 중" for log in logs)
 
 
 def test_frontend_origin_can_call_api():
@@ -196,7 +222,7 @@ def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
         async def __aexit__(self, *args):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, headers=None):
             assert url.endswith("/api/story-review")
             assert json["name"] == "새 이야기"
             return FakeResponse()
@@ -208,6 +234,44 @@ def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
     )
     assert response.status_code == 200
     assert response.json()["reviewId"] == "review-main"
+
+
+def test_story_review_waits_longer_than_the_default_http_timeout(monkeypatch):
+    from app import main
+
+    captured: dict[str, float] = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"reviewId": "review-timeout", "verdict": "review_required", "approvalRequired": True}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json, headers=None):
+            return FakeResponse()
+
+    def create_client(timeout):
+        captured["timeout"] = timeout
+        return FakeClient()
+
+    monkeypatch.delenv("CATALOG_API_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setattr(main.httpx, "AsyncClient", create_client)
+
+    response = TestClient(app).post(
+        "/api/stories/review",
+        json={"name": "시간 제한 테스트", "keywords": ["테스트"], "answer": "본문"},
+    )
+
+    assert response.status_code == 200
+    assert captured["timeout"] == 45.0
 
 
 def test_story_approve_proxy_calls_catalog_approve_endpoint(monkeypatch):
@@ -225,7 +289,7 @@ def test_story_approve_proxy_calls_catalog_approve_endpoint(monkeypatch):
         async def __aexit__(self, *args):
             return False
 
-        async def post(self, url, json):
+        async def post(self, url, json, headers=None):
             assert url.endswith("/api/story-approve")
             assert json["reviewId"] == "review-main"
             return FakeResponse()
@@ -330,4 +394,3 @@ def test_resume_video_scene_returns_502_when_video_agent_unreachable(monkeypatch
     )
 
     assert response.status_code == 502
-

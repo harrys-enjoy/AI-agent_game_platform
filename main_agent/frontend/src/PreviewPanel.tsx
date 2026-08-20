@@ -17,10 +17,10 @@ function createPreviewFile(file: File): PreviewFile {
   return { id: `${file.name}-${file.lastModified}-${file.size}`, file, kind, objectUrl: kind === "image" ? URL.createObjectURL(file) : undefined };
 }
 
-type PreviewPanelProps = { isGameQa?: boolean; recentGameQnaWork?: RecentGameQnaWork[]; artPrompt?: ArtPrompt | null; artPromptTransferStatus?: "idle" | "sending" | "sent" | "error"; onSendArtPromptToVideo?: () => void };
+type PreviewPanelProps = { isGameQa?: boolean; currentChat?: string; recentGameQnaWork?: RecentGameQnaWork[]; artPrompt?: ArtPrompt | null; artPromptTransferStatus?: "idle" | "sending" | "sent" | "error"; onSendArtPromptToVideo?: () => void };
 
-export default function PreviewPanel({ isGameQa, recentGameQnaWork, artPrompt, artPromptTransferStatus, onSendArtPromptToVideo }: PreviewPanelProps) {
-  const [activeChat, setActiveChat] = useState(() => document.querySelector(".shell")?.getAttribute("data-active-chat") ?? "");
+export default function PreviewPanel({ isGameQa, currentChat, recentGameQnaWork, artPrompt, artPromptTransferStatus, onSendArtPromptToVideo }: PreviewPanelProps) {
+  const activeChat = currentChat ?? "";
   const [isOpen, setIsOpen] = useState(false);
   const [files, setFiles] = useState<PreviewFile[]>([]);
   const [activeId, setActiveId] = useState<string>();
@@ -34,13 +34,6 @@ export default function PreviewPanel({ isGameQa, recentGameQnaWork, artPrompt, a
 
   useEffect(() => { filesRef.current = files; }, [files]);
   useEffect(() => () => filesRef.current.forEach((item) => item.objectUrl && URL.revokeObjectURL(item.objectUrl)), []);
-  useEffect(() => {
-    const shell = document.querySelector(".shell");
-    if (!shell) return undefined;
-    const observer = new MutationObserver(() => setActiveChat(shell.getAttribute("data-active-chat") ?? ""));
-    observer.observe(shell, { attributes: true, attributeFilter: ["data-active-chat"] });
-    return () => observer.disconnect();
-  }, []);
   useEffect(() => {
     function handleStoryReviewRoute(event: Event) {
       const content = (event as CustomEvent<{ content?: string }>).detail?.content ?? "";

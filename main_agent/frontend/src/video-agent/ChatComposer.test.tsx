@@ -29,4 +29,18 @@ describe("ChatComposer", () => {
     render(<ChatComposer disabled={true} onSubmit={vi.fn()} />);
     expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
   });
+
+  it("disables the brief textarea while a task is busy", () => {
+    render(<ChatComposer disabled={true} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText("영상 브리프")).toBeDisabled();
+  });
+
+  it("states the real duration and budget limits in the placeholder", () => {
+    render(<ChatComposer disabled={false} onSubmit={vi.fn()} />);
+    expect(
+      screen.getByPlaceholderText(
+        "무엇을 홍보할지 구체적으로 적어주세요 (캐릭터/이벤트/게임 장면 등, 30초 이하, 예산 $5 이하). 예: 할로윈 신규 캐릭터 '루멘' 공개 이벤트, 15초로",
+      ),
+    ).toBeInTheDocument();
+  });
 });

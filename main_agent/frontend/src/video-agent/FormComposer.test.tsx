@@ -29,4 +29,15 @@ describe("FormComposer", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it("disables every field while a task is busy", () => {
+    render(<FormComposer disabled={true} onSubmit={vi.fn()} />);
+
+    expect(screen.getByLabelText("브리프")).toBeDisabled();
+    expect(screen.getByLabelText("길이(초)")).toBeDisabled();
+    expect(screen.getByLabelText("프리셋")).toBeDisabled();
+    expect(screen.getByLabelText("씬 종류")).toBeDisabled();
+    expect(screen.getByLabelText("예산(달러)")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
+  });
 });

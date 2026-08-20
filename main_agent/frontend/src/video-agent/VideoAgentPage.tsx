@@ -29,7 +29,11 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const { task, reconnecting, error, resumePolling } = useVideoTaskPolling(taskId);
+  const { task, reconnecting, error, notFound, resumePolling } = useVideoTaskPolling(taskId);
+
+  useEffect(() => {
+    if (notFound) window.localStorage.removeItem(STORAGE_KEY);
+  }, [notFound]);
 
   useEffect(() => {
     if (task?.status.state === "TASK_STATE_INPUT_REQUIRED" && task.status.unresolvedScenes) {
@@ -62,6 +66,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
     if (!taskId) return;
     try {
       await cancelVideoAgentTask(taskId);
+      resumePolling();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "취소 요청에 실패했습니다.");
     }
@@ -87,49 +92,57 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
   }
 
   const isBusy = task?.status.state === "TASK_STATE_SUBMITTED" || task?.status.state === "TASK_STATE_WORKING";
+  const canCancel = isBusy || task?.status.state === "TASK_STATE_INPUT_REQUIRED";
 
   return (
-    <div className="grid h-full grid-cols-[minmax(280px,360px)_1fr] gap-4 bg-brief-bg p-4">
-      <aside className="flex flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
-        <h1 className="text-lg font-semibold text-brief-text">영상 생성</h1>
-        <ComposerTabs
-          chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} initialValue={initialBrief} />}
-          form={<FormComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
-        />
-        {clarifyingQuestion && (
-          <p className="rounded bg-amber-50 p-2 text-sm text-amber-800" data-testid="clarifying-question">
-            {clarifyingQuestion}
-          </p>
-        )}
-        {submitError && (
-          <p className="rounded bg-red-50 p-2 text-sm text-red-700" data-testid="submit-error">
-            {submitError}
-          </p>
-        )}
-        {task && <StatusBadge state={task.status.state} startedAt={startedAt} />}
-        {reconnecting && (
-          <p className="text-sm text-amber-600" data-testid="reconnecting-banner">
-            재연결 중...
-          </p>
-        )}
-        {error && (
-          <p className="text-sm text-red-700" data-testid="polling-error">
-            {error}
-          </p>
-        )}
-        {isBusy && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded-[8px] border border-brief-border px-3 py-2 text-sm text-brief-text"
-          >
-            취소
-          </button>
-        )}
-      </aside>
-      <main className="rounded-[15px] border border-brief-border bg-white p-4">
-        <TaskCanvas task={task} unresolvedScenes={unresolvedScenes} onUploadScene={handleUploadScene} onRetry={handleRetry} />
-      </main>
-    </div>
+    <>
+      <div className="title-row">
+        <div>
+          <p className="eyebrow">MAIN AGENT / VIDEO GENERATION</p>
+          <h1>영상 생성</h1>
+        </div>
+      </div>
+      <div className="grid grid-cols-[minmax(280px,360px)_1fr] gap-4">
+        <aside className="flex min-h-[520px] flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
+          <ComposerTabs
+            chat={<ChatComposer disabled={isBusy || submitting} onSubmit={handleSubmit} initialValue={initialBrief} />}
+            form={<FormComposer disabled={isBusy || submitting} onSubmit={handleSubmit} />}
+          />
+          {clarifyingQuestion && (
+            <p className="rounded bg-amber-50 p-2 text-sm text-amber-800" data-testid="clarifying-question">
+              {clarifyingQuestion}
+            </p>
+          )}
+          {submitError && (
+            <p className="rounded bg-red-50 p-2 text-sm text-red-700" data-testid="submit-error">
+              {submitError}
+            </p>
+          )}
+          {task && <StatusBadge state={task.status.state} startedAt={startedAt} />}
+          {reconnecting && (
+            <p className="text-sm text-amber-600" data-testid="reconnecting-banner">
+              재연결 중...
+            </p>
+          )}
+          {error && (
+            <p className="text-sm text-red-700" data-testid="polling-error">
+              {error}
+            </p>
+          )}
+          {canCancel && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="rounded-[8px] border border-brief-border px-3 py-2 text-sm text-brief-text"
+            >
+              취소
+            </button>
+          )}
+        </aside>
+        <main className="min-h-[520px] rounded-[15px] border border-brief-border bg-white p-4">
+          <TaskCanvas task={task} unresolvedScenes={unresolvedScenes} onUploadScene={handleUploadScene} onRetry={handleRetry} />
+        </main>
+      </div>
+    </>
   );
 }

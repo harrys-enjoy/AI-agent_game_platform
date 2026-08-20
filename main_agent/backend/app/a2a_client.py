@@ -1,5 +1,6 @@
 import asyncio
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -12,9 +13,9 @@ class A2AClient:
     def __init__(
         self,
         transport: httpx.AsyncBaseTransport | None = None,
-        timeout: float = 5.0,
+        timeout: float = 600.0,
         poll_interval: float = 1.0,
-        poll_timeout: float = 30.0,
+        poll_timeout: float = 600.0,
     ):
         self.transport = transport
         self.timeout = timeout
@@ -56,6 +57,39 @@ class A2AClient:
                 return artifact_answer
         return ""
 
+    @staticmethod
+    def _extract_pending_action(body: dict[str, Any]) -> dict[str, Any] | None:
+        """`assistant_ask`가 확인이 필요한 동작(예: `analyze_meeting`)을 골랐을 때
+        같은 Artifact의 JSON Data Part에 실어 보내는 `pending_action`을 읽는다
+        (`app/a2a/runtime.py::_artifact_parts`, `assistant_ask_workflow`가 만드는
+        `{"type": "assistant_reply", "data": {...}}` 봉투 — `workmate-agent`의
+        `tools/m51_legacy_adapter.py::_legacy_response`와 같은 자리를 읽는 로직이다).
+        확인 없이 자동 실행하면 안 되는 동작이라, 이 값이 있으면 `chat_reply()`가
+        안내 문구를 답변에 덧붙인다(2026-08-19 실사용 중 발견 — 이게 없으면 채팅이
+        확인을 기다리며 "죽은 것처럼" 그냥 멈춰 보였다).
+
+        `message:send`(`{"task": {...}}`로 감싼 응답)와 `GET .../tasks/{id}`(Task
+        객체가 그대로 최상위에 오는 응답) 둘 다 받을 수 있다 — `m51_legacy_adapter.py::
+        _legacy_response`와 같은 두 모양 판별을 그대로 따른다."""
+
+        task = body.get("task")
+        if not isinstance(task, dict):
+            task = body if isinstance(body.get("status"), dict) else None
+        if not isinstance(task, dict):
+            return None
+        for artifact in task.get("artifacts", []):
+            if not isinstance(artifact, dict):
+                continue
+            for part in artifact.get("parts", []):
+                if not isinstance(part, dict):
+                    continue
+                data = part.get("data")
+                if isinstance(data, dict) and data.get("type") == "assistant_reply":
+                    reply_data = data.get("data")
+                    if isinstance(reply_data, dict) and reply_data.get("pending_action"):
+                        return reply_data["pending_action"]
+        return None
+
     async def send_message(
         self,
         agent_url: str,
@@ -69,16 +103,20 @@ class A2AClient:
         if is_http_json:
             parts = [{"text": request.get("message", "")}]
             if request.get("skill_id"):
-                parts = [{
-                    "data": {
-                        "skill_id": request["skill_id"],
-                        "message": request.get("message", ""),
-                    },
-                    "mediaType": "application/json",
-                }]
+                data: dict[str, Any] = {
+                    "skill_id": request["skill_id"],
+                    "message": request.get("message", ""),
+                }
+                # 확인 버튼 재전송(`main.py::chat_reply()`가 `ChatReplyRequest.confirmed_skill_id`
+                # 를 받았을 때) — 그대로 실어 보내면 workmate-agent의
+                # `assistant_ask_workflow()`가 route()를 다시 안 묻고 바로 실행한다.
+                if request.get("confirmed_skill_id"):
+                    data["confirmed_skill_id"] = request["confirmed_skill_id"]
+                    data["confirmed_arguments"] = request.get("confirmed_arguments") or {}
+                parts = [{"data": data, "mediaType": "application/json"}]
             payload = {
                 "message": {
-                    "messageId": request.get("request_id", "main-agent"),
+                    "messageId": request.get("request_id") or str(uuid.uuid4()),
                     "role": "ROLE_USER",
                     "parts": parts,
                     **({"contextId": request["context_id"]} if request.get("context_id") else {}),
@@ -88,6 +126,7 @@ class A2AClient:
                     "locale": request.get("locale", "ko"),
                     "context": request.get("context", {}),
                     "evidence": request.get("evidence", []),
+                    "owner": request.get("owner"),
                     **({"systemPrompt": request["system_prompt"]} if request.get("system_prompt") else {}),
                 },
             }
@@ -108,7 +147,7 @@ class A2AClient:
             if is_http_json:
                 answer = self._extract_answer(body)
                 if answer:
-                    return {"status": "succeeded", "answer": answer, "raw": body}
+                    return {"status": "succeeded", "answer": answer, "pending_action": self._extract_pending_action(body), "raw": body}
                 if body.get("task"):
                     task = body["task"]
                     task_url = task.get("url")
@@ -145,7 +184,7 @@ class A2AClient:
                 status = terminal.get(state)
                 answer = self._extract_answer(body)
                 if status:
-                    return {"status": status, "answer": answer, "task": task, "raw": body}
+                    return {"status": status, "answer": answer, "pending_action": self._extract_pending_action(body), "task": task, "raw": body}
                 if time.monotonic() >= deadline:
                     raise TimeoutError(f"A2A Task polling timed out: {task_url}")
                 await asyncio.sleep(self.poll_interval)

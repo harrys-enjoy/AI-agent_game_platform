@@ -3,18 +3,21 @@ import type { MessageSendResponse, Task } from "./types";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
-export async function createVideoAgentTask(message: string): Promise<MessageSendResponse> {
+export async function createVideoAgentTask(message: string, owner = "default"): Promise<MessageSendResponse> {
   const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, owner }),
   });
   if (!response.ok) throw new Error(`video-agent task create failed: HTTP ${response.status}`);
   return response.json();
 }
 
+export class VideoAgentTaskNotFoundError extends Error {}
+
 export async function getVideoAgentTask(taskId: string): Promise<Task> {
   const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks/${encodeURIComponent(taskId)}`);
+  if (response.status === 404) throw new VideoAgentTaskNotFoundError(`video-agent task not found: ${taskId}`);
   if (!response.ok) throw new Error(`video-agent task fetch failed: HTTP ${response.status}`);
   const payload = await response.json();
   return payload.task as Task;

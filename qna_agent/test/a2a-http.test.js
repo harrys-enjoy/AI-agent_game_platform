@@ -16,6 +16,7 @@ test('A2A HTTP+JSON SendMessage 요청을 내부 에이전트 요청으로 변�
   assert.deepEqual(request, {
     requestId: 'message-1',
     mode: 'dev-guide',
+    locale: 'ko',
     question: '전투 시스템 기획을 검토해줘',
     context: { contextId: 'context-1' },
     evidence: ['회의 메모'],

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "lore-route-light-memory-discovery",
+    "name": "빛과 기억의 항로 발견",
+    "keywords": [
+      "빛과 기억의 항로",
+      "특정 항로",
+      "숨은 항로",
+      "항로 발견",
+      "유리별의 기억"
+    ],
+    "answer": "얼음 구름과 서리 늑대의 서식지를 통과한 탐사대는 기존 지도에 기록되지 않은 새로운 항로를 발견한다. 이 항로는 유리별의 빛이 특정한 각도로 반사되는 순간에만 모습을 드러내며, 과거 항로 개척자들의 기억이 빛의 잔향으로 남아 있다. 이 발견의 가치는 새로운 이동로를 확보하는 데 있지 않다. 유리별이 단순한 항로 표식이 아니라 사람들의 선택과 기억을 보존하는 존재라는 사실을 증명한다는 데 있다. 질서의 세력은 항로를 통제해 교역과 기록을 독점하려 하고, 전우치는 발견된 항로를 모두에게 개방해야 한다고 주장한다. 홍길동은 항로의 안전과 공정한 이용 규칙을 세우려 하며, 연화는 항로에 남은 기억의 진위와 기록 조작 여부를 검증한다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": [
+      "original-lore"
+    ],
+    "relatedLoreIds": [
+      "glass-star-origin",
+      "north-route",
+      "dawn-mountain"
+    ],
+    "relatedCodexIds": [],
+    "storyArc": "main-route"
+  },
+  {
+    "id": "dawn-mountain",
+    "name": "여명산",
+    "keywords": [
+      "여명산",
+      "상층 진입",
+      "거대한 산",
+      "얼음 구름",
+      "서리 늑대",
+      "상층 항로"
+    ],
+    "answer": "얼음 구름과 서리 늑대의 서식지를 지나 상층으로 향하는 길에는 여명산이라 불리는 거대한 산이 솟아 있다. 여명산은 유리별의 빛과 오래된 기억의 잔향이 오랜 시간 쌓여 형성된 경계 지형이다. 산을 넘기 위해서는 숨은 항로의 빛이 나타나는 시간, 서리 늑대의 이동 흔적, 얼음 구름의 흐름을 모두 이해해야 한다. 산 정상에는 상층 항로를 관측할 수 있는 오래된 탐사 지점이 남아 있으며, 여명산은 발견한 항로의 가치와 탐사자의 자격을 증명하는 시련이 된다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": [
+      "original-lore"
+    ],
+    "relatedLoreIds": [
+      "north-route",
+      "lore-route-light-memory-discovery"
+    ],
+    "relatedCodexIds": [],
+    "storyArc": "main-route"
+  },
+  {
+    "id": "새-사건-mt0v1bpr",
+    "name": "새 사건",
+    "keywords": [
+      "새 사건"
+    ],
+    "answer": "기록",
+    "relatedLoreIds": [],
+    "relatedCodexIds": [],
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": [],
+    "storyArc": "reviewed"
+  },
+  {
+    "id": "새-사건-mt0vad6x",
+    "name": "새 사건",
+    "keywords": [
+      "새 사건"
+    ],
+    "answer": "기록",
+    "relatedLoreIds": [],
+    "relatedCodexIds": [],
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": [],
+    "storyArc": "reviewed"
+  }
+]

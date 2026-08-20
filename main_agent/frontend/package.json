@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:agent-routing": "node --experimental-strip-types scripts/agent-routing-test.mjs",
+    "test:art-prompt": "node --experimental-strip-types scripts/art-prompt-test.mjs",
     "test:preview": "node --experimental-strip-types scripts/preview-utils-test.mjs",
     "test:preview-mode": "node --experimental-strip-types scripts/preview-mode-test.mjs",
     "test:menu": "node --experimental-strip-types scripts/menu-utils-test.mjs",
