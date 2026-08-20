@@ -106,6 +106,7 @@ class StoryApproveRequest(BaseModel):
 
 class VideoAgentTaskRequest(BaseModel):
     message: str
+    assignee: str | None = None
 
 
 class LocalClient:
@@ -578,7 +579,17 @@ async def resume_video_scene(task_id: str, scene_id: str, file: UploadFile = Fil
 @app.post("/api/video-agent/tasks")
 async def create_video_agent_task(payload: VideoAgentTaskRequest) -> dict:
     try:
-        return await video_agent_client.send_message(registry, payload.message)
+        return await video_agent_client.send_message(registry, payload.message, user_id=payload.assignee)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/video-agent/tasks")
+async def list_video_agent_tasks(assignee: str) -> dict:
+    try:
+        return await video_agent_client.list_tasks(registry, assignee)
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except (httpx.HTTPError, RuntimeError) as exc:

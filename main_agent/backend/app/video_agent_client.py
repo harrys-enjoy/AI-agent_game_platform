@@ -1,5 +1,6 @@
 import uuid
 from typing import Any, Literal
+from urllib.parse import quote
 
 import httpx
 
@@ -45,15 +46,25 @@ async def _call(
     return payload
 
 
-async def send_message(registry: AgentRegistry, text: str) -> dict[str, Any]:
+async def send_message(registry: AgentRegistry, text: str, user_id: str | None = None) -> dict[str, Any]:
     config = registry.config("video-agent")
     body = {"message": {"messageId": str(uuid.uuid4()), "role": "ROLE_USER", "parts": [{"text": text}]}}
-    return await _call(f"{config.base_url}/a2a/message:send", "post", headers=_headers(registry), json=body, timeout=60.0)
+    headers = _headers(registry)
+    if user_id:
+        # HTTP header values must be ASCII/latin-1 - percent-encode (assignee
+        # names are Korean), same convention as workmate's X-Workmate-Assignee.
+        headers["X-Video-Agent-User"] = quote(user_id)
+    return await _call(f"{config.base_url}/a2a/message:send", "post", headers=headers, json=body, timeout=60.0)
 
 
 async def get_task(registry: AgentRegistry, task_id: str) -> dict[str, Any]:
     config = registry.config("video-agent")
     return await _call(f"{config.base_url}/a2a/tasks/{task_id}", "get", headers=_headers(registry))
+
+
+async def list_tasks(registry: AgentRegistry, user_id: str) -> dict[str, Any]:
+    config = registry.config("video-agent")
+    return await _call(f"{config.base_url}/a2a/tasks?user_id={quote(user_id)}", "get", headers=_headers(registry))
 
 
 async def cancel_task(registry: AgentRegistry, task_id: str) -> dict[str, Any]:

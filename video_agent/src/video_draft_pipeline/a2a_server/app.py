@@ -2,8 +2,9 @@ import os
 import uuid
 from pathlib import Path
 from typing import Callable
+from urllib.parse import unquote
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Header, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
@@ -22,6 +23,7 @@ from .protocol import (
     parse_message_send_request,
 )
 from .render_runner import build_unresolved_scenes, default_resume_render_agent, run_render_task
+from .task_repository import task_repository
 from .tasks import TaskStore
 from ..agents.errors import MissingAPIKeyError
 from ..agents.video_render_agent import VideoRenderAgent
@@ -80,6 +82,10 @@ def create_app(
     resume_render_agent_fn: Callable[[], VideoRenderAgent] = default_resume_render_agent,
 ) -> FastAPI:
     internal_url = self_internal_url or os.environ.get("SELF_INTERNAL_URL", "http://video-agent:8002")
+    # NOTE: this default is plain in-memory on purpose - test_app_scaffold.py calls
+    # create_app() with no task_store override, and shouldn't touch a real SQLite
+    # file on disk. The real server wires persistence explicitly at the bottom of
+    # this module (`app = create_app(task_store=TaskStore(repository=task_repository()))`).
     store = task_store or TaskStore()
     media_url = media_public_base_url or os.environ.get("MEDIA_PUBLIC_BASE_URL", "http://localhost:8002")
     store_for_projects = project_store or ProjectStore(str(Path(media_dir) / "a2a_server" / "projects"))
@@ -106,8 +112,16 @@ def create_app(
             return error_response("NOT_FOUND", f"Unknown task: {task_id}")
         return _task_response(record, media_url)
 
+    @app.get("/a2a/tasks", dependencies=[Depends(require_a2a_auth)])
+    def list_tasks(user_id: str):
+        return {"tasks": [_task_response(record, media_url) for record in store.list_for_user(user_id)]}
+
     @app.post("/a2a/message:send", dependencies=[Depends(require_a2a_auth)])
-    async def message_send(request: Request, background_tasks: BackgroundTasks):
+    async def message_send(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        x_video_agent_user: str | None = Header(default=None, alias="X-Video-Agent-User"),
+    ):
         try:
             body = await request.json()
         except ValueError:
@@ -148,7 +162,8 @@ def create_app(
             except ValidationError as exc:
                 return error_response("INVALID_ARGUMENT", str(exc))
 
-            record = store.create()
+            user_id = unquote(x_video_agent_user) if x_video_agent_user else None
+            record = store.create(user_id=user_id)
             store.register_message_id(message.messageId, record.task_id)
             registered = True
             store.mark_working(record.task_id)
@@ -237,4 +252,4 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(task_store=TaskStore(repository=task_repository()))

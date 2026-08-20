@@ -52,20 +52,26 @@ services:
     environment:
       WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
       APP_BASE_URL: "http://workmate-agent:8001/a2a"
-      # 컨테이너 안에서는 `Path(__file__).resolve().parents[3]` 기반 기본 토큰 경로 추정
-      # (`app/workflows/daily_briefing.py`)이 리포 레이아웃과 안 맞아 항상 빗나간다.
-      # google-oauth-test/token.json 자체는 지금 로컬에 없어서(disabled-for-test 파일만 있음)
-      # 볼륨 마운트는 보류 - 준비되면 아래 volumes:에
-      # `- "../google-oauth-test/token.json:/app/google-oauth-test/token.json"` 한 줄을 추가한다.
+      # 컨테이너 안에서는 `Path(__file__).resolve().parents[3]` 기반 기본 토큰/시크릿 경로 추정
+      # (`app/workflows/daily_briefing.py`, `app/google_oauth_web.py`)이 리포 레이아웃과 안 맞아
+      # 항상 빗나간다 - GOOGLE_TOKEN_FILE/GOOGLE_CLIENT_SECRET_FILE 둘 다 명시적으로 절대경로를
+      # 지정하고, 아래 volumes:로 실제 파일을 그 경로에 마운트한다.
       GOOGLE_TOKEN_FILE: "/app/google-oauth-test/token.json"
+      GOOGLE_CLIENT_SECRET_FILE: "/app/google-oauth-test/client_secret.json"
     # `.runtime/`은 workmate-agent 저장소(vendored copy 포함)에서 항상 gitignore 대상이라
     # 컨테이너를 새로 띄우면 비어 있는 SQLite로 시작한다 - 이 저장소를 clone만 받은 사람에게는
     # 정상 동작(빈 상태로 시작)이다. 로컬에서 `python -m app.server`로 workmate-agent를 따로
     # 띄워 데이터를 쌓아온 사람이 그 데이터를 컨테이너와 공유하고 싶다면, 아래 경로를 자신의
     # 실제 workmate-agent 체크아웃(예: c:\dev\workmate\workmate-agent\.runtime)으로 바꿔서
     # 쓰면 된다 - 다만 그 경로는 각자 로컬에서만 유효하므로 이 파일에 커밋하지 않는다.
+    #
+    # google-oauth-test/ 는 workmate-agent/.gitignore에 있어 절대 커밋되지 않는다 - 로컬에
+    # client_secret.json(및 나중에 생길 token.json)을 두면 아래 마운트로 컨테이너에 들어간다.
+    # Dockerfile은 이 폴더를 이미지에 COPY하지 않으므로(의도적 - 시크릿을 이미지에 굽지 않기
+    # 위해) 이 볼륨 마운트가 없으면 파일이 있어도 컨테이너에서는 안 보인다.
     volumes:
       - "../workmate-agent/.runtime:/app/.runtime"
+      - "../workmate-agent/google-oauth-test:/app/google-oauth-test"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
       interval: 5s
@@ -83,6 +89,18 @@ services:
     # container-to-container.
     env_file:
       - .env
+    # OUTPUT_DIR (a2a_server/render_runner.py)는 컨테이너 안의 /app/media 상대경로다 -
+    # 마운트가 없으면 생성된 영상이 컨테이너 자체 쓰기 레이어에만 남아 재생성/재빌드마다
+    # 사라진다. workmate-agent의 .runtime/ 마운트와 같은 목적 - 호스트 쪽 폴더에 실제로
+    # 쓰이게 해 컨테이너 lifecycle과 분리한다.
+    #
+    # .runtime/tasks.sqlite3 (a2a_server/task_repository.py) - 어느 담당자가 어느 영상을
+    # 만들었는지 기록하는 Task 메타데이터. 영상 파일 자체(media/)와 별개로 이것도 마운트가
+    # 없으면 재시작마다 사라진다 - workmate-agent와 동일하게 완전 로컬 SQLite, 외부/서버형
+    # DB(Neon 등) 아님.
+    volumes:
+      - "../video_agent/media:/app/media"
+      - "../video_agent/.runtime:/app/.runtime"
 
   dev-agent:
     build: ../dev_agent

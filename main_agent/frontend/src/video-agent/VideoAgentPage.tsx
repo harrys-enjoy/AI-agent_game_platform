@@ -22,7 +22,7 @@ function readPersistedTask(): { taskId: string; startedAt: number } | null {
   }
 }
 
-export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {}) {
+export function VideoAgentPage({ initialBrief, assignee }: { initialBrief?: string; assignee?: string } = {}) {
   const [taskId, setTaskId] = useState<string | null>(() => readPersistedTask()?.taskId ?? null);
   const [startedAt, setStartedAt] = useState(() => readPersistedTask()?.startedAt ?? Date.now());
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
     setClarifyingQuestion(null);
     setSubmitting(true);
     try {
-      const response = await createVideoAgentTask(message);
+      const response = await createVideoAgentTask(message, assignee);
       if ("task" in response) {
         setTaskId(response.task.id);
         setStartedAt(Date.now());
