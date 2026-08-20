@@ -285,8 +285,8 @@ function ProposalsInner({ config }: { config: WorkmateConfig }) {
     </div>
     {connectError && <p style={{ color: "#bd655b" }}>{connectError}</p>}
     <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", padding: 16, background: "#fff", border: "1px solid #dfe7e1", borderRadius: 12, marginBottom: 12 }}>
-      <div><b style={{ fontSize: 13 }}>Google 계정 연결</b><p style={{ margin: "4px 0 0", color: "#75867f", fontSize: 12 }}>{googleConnected ? "내 Google 계정이 연결돼 있습니다." : "연결하지 않아도 개발 환경 공유 계정이 있으면 동기화가 그대로 동작합니다."}</p></div>
-      {googleConnected ? <button type="button" style={{ marginLeft: "auto" }} disabled={googleConnecting} onClick={disconnectGoogleAccount}>{googleConnecting ? "처리 중..." : "연결 해제"}</button> : <button type="button" style={{ marginLeft: "auto" }} disabled={googleConnecting || googleConnected === null} onClick={connectGoogleAccount}>{googleConnecting ? "이동 중..." : "Google 계정 연결"}</button>}
+      <div><b style={{ fontSize: 13 }}>Google 계정 연결</b><p style={{ margin: "4px 0 0", color: "#75867f", fontSize: 12 }}>{googleConnected === null ? "연결 상태 확인 중..." : googleConnected ? "내 Google 계정이 연결돼 있습니다." : "연결하지 않아도 개발 환경 공유 계정이 있으면 동기화가 그대로 동작합니다."}</p></div>
+      {googleConnected === null ? <button type="button" style={{ marginLeft: "auto" }} disabled>확인 중...</button> : googleConnected ? <button type="button" style={{ marginLeft: "auto" }} disabled={googleConnecting} onClick={disconnectGoogleAccount}>{googleConnecting ? "처리 중..." : "연결 해제"}</button> : <button type="button" style={{ marginLeft: "auto" }} disabled={googleConnecting} onClick={connectGoogleAccount}>{googleConnecting ? "이동 중..." : "Google 계정 연결"}</button>}
     </div>
     {googleError && <p style={{ color: "#bd655b" }}>{googleError}</p>}
     <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", padding: 16, background: "#fff", border: "1px solid #dfe7e1", borderRadius: 12, marginBottom: 12 }}>
