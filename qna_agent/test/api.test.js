@@ -155,3 +155,27 @@ test('well-known Agent Card를 공개한다', async () => {
   assert.equal(body.url, 'https://game.example/message:send');
   assert.equal(body.skills.length, 4);
 });
+
+test('스토리 리뷰와 승인 API가 Q&A Agent에서 동작한다', async () => {
+  const server = createServer({
+    modelAdapter: { async generate() { return { answer: JSON.stringify({ verdict: 'pass' }) }; } },
+    apiKey: '',
+  }).listen(0);
+  await once(server, 'listening');
+  const { port } = server.address();
+  const draft = { name: '새 사건', keywords: ['새 사건'], answer: '기록', relatedLoreIds: [], relatedCodexIds: [] };
+  const reviewed = await fetch(`http://127.0.0.1:${port}/api/story-review`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(draft),
+  });
+  const reviewBody = await reviewed.json();
+  const approved = await fetch(`http://127.0.0.1:${port}/api/story-approve`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ reviewId: reviewBody.reviewId, draft }),
+  });
+  const approveBody = await approved.json();
+  server.close();
+  assert.equal(reviewed.status, 200);
+  assert.equal(reviewBody.verdict, 'pass');
+  assert.equal(approved.status, 200);
+  assert.equal(approveBody.status, 'saved');
+});

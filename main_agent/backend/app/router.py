@@ -30,9 +30,24 @@ class RouterLLM:
     def __init__(self, env: dict[str, str] | None = None, transport: httpx.AsyncBaseTransport | None = None):
         env = env or os.environ
         self.enabled = (env.get("ROUTER_LLM_ENABLED") or env.get("MODEL_ENABLED", "false")).lower() == "true"
-        self.model = env.get("ROUTER_MODEL_NAME") or env.get("MODEL_NAME", "")
-        self.base_url = (env.get("ROUTER_BASE_URL") or env.get("MODEL_BASE_URL") or env.get("QWEN_BASE_URL", "")).rstrip("/")
-        self.api_key = env.get("ROUTER_API_KEY") or env.get("MODEL_API_KEY", "")
+        router_model, router_base, router_key = env.get("ROUTER_MODEL_NAME"), env.get("ROUTER_BASE_URL"), env.get("ROUTER_API_KEY")
+        if self.enabled and not (router_model and router_base and router_key):
+            # main_agent/.env is shared with game-qna-agent, which sets its own MODEL_NAME/
+            # MODEL_BASE_URL/MODEL_API_KEY for its own LLM calls. Falling back to those same
+            # names here would silently point request-routing at qna_agent's model instead of
+            # a router-specific one - warn loudly rather than let that happen quietly.
+            import warnings
+
+            warnings.warn(
+                "RouterLLM: ROUTER_LLM_ENABLED is true but ROUTER_MODEL_NAME/ROUTER_BASE_URL/ROUTER_API_KEY "
+                "aren't all set - falling back to MODEL_NAME/MODEL_BASE_URL/MODEL_API_KEY, which is also "
+                "game-qna-agent's own LLM config in the shared main_agent/.env. Set ROUTER_* explicitly if "
+                "the router should use a different model.",
+                stacklevel=2,
+            )
+        self.model = router_model or env.get("MODEL_NAME", "")
+        self.base_url = (router_base or env.get("MODEL_BASE_URL") or env.get("QWEN_BASE_URL", "")).rstrip("/")
+        self.api_key = router_key or env.get("MODEL_API_KEY", "")
         self.timeout = float(env.get("ROUTER_TIMEOUT_SECONDS", "8"))
         self.transport = transport
 

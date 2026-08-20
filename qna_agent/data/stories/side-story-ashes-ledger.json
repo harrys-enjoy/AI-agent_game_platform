@@ -1,0 +1,68 @@
+[
+  {
+    "id": "side-ashes-ledger",
+    "name": "재의 장부",
+    "keywords": ["재의 장부", "번외편", "전우치 홍길동 외전", "세력의 몰락"],
+    "answer": "재의 장부는 전우치와 홍길동의 세력이 무너진 뒤, 세 세력의 죄와 희생자의 이름을 기록한 번외 이야기다. 연화는 장부의 마지막 페이지에 아직 기록되지 않은 이름이 무명회 자신이라는 사실을 밝혀낸다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["unnamed-society-codex"],
+    "storyArc": "side-story"
+  },
+  {
+    "id": "side-unnamed-society",
+    "name": "무명회",
+    "keywords": ["무명회", "제3세력", "영웅 없는 세상", "중립 세력"],
+    "answer": "무명회는 전우치와 홍길동 어느 쪽에도 속하지 않는 사람들의 연합이다. 전우치의 도술로 피해를 입은 사람, 홍길동의 규율에 희생된 사람, 조정에서 버림받은 기록관과 피난민이 모여 어떤 영웅도 절대 권력을 갖지 못하게 하려 한다. 그러나 영웅을 감시하던 무명회 역시 점차 새로운 감시자가 된다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["unnamed-society-codex"],
+    "storyArc": "side-story"
+  },
+  {
+    "id": "side-yeonhwa",
+    "name": "연화의 기록",
+    "keywords": ["연화", "히로인", "여우구슬", "제3의 선택", "재의 장부"],
+    "answer": "연화는 전우치의 여우구슬과 천서의 비밀, 홍길동의 새로운 질서가 남긴 기록을 함께 알고 있는 중립자다. 그녀는 전우치에게 자유가 방종이 될 수 있음을, 홍길동에게 질서가 통제가 될 수 있음을, 무명회에게 감시도 지배가 될 수 있음을 경고한다. 연화는 누구의 연인이 되는 대신 세 세력의 잘못을 기록하고 공개하는 선택을 한다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["yeonhwa-codex", "unnamed-society-codex"],
+    "storyArc": "side-story"
+  },
+  {
+    "id": "side-jeonuchi-fall",
+    "name": "전우치 세력의 몰락",
+    "keywords": ["전우치 세력", "전우치의 몰락", "자유의 타락", "사적 복수"],
+    "answer": "전우치의 세력은 자유를 나누려 했지만 일부 구성원이 그 이름으로 상단과 홍길동 세력의 식량 창고를 습격하고 사적 복수를 시작하면서 분열된다. 전우치는 부하를 처벌하려 하지만, 부하들은 자신들이 그에게 배운 대로 가진 자의 것을 빼앗았을 뿐이라고 반박한다. 전우치는 자신의 이름과 관련된 문서와 상징을 없애고 지도자의 자리에서 물러난다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["wind-band-codex"],
+    "storyArc": "side-story"
+  },
+  {
+    "id": "side-honggildong-fall",
+    "name": "홍길동 세력의 해체",
+    "keywords": ["홍길동 세력", "홍길동의 몰락", "질서의 타락", "활빈당 해체"],
+    "answer": "홍길동의 세력은 공동체를 지키기 위해 이동 허가와 사상 검증, 내부 감시를 도입한다. 안전을 위한 규칙은 강제 복종으로 변하고, 홍길동의 인장이 찍힌 연화 체포 명령서가 발견되면서 그는 조직이 자신 없이도 권력을 행사하고 있음을 깨닫는다. 홍길동은 모든 기록과 인장을 공개해 조직을 해체하고, 각 지역 공동체가 스스로 규칙을 정하도록 한다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["alive-community-codex"],
+    "storyArc": "side-story"
+  },
+  {
+    "id": "side-third-banner",
+    "name": "세 번째 깃발",
+    "keywords": ["세 번째 깃발", "무명회의 결말", "연화의 선택", "기록의 공개"],
+    "answer": "전우치와 홍길동의 세력이 무너진 뒤 무명회는 세 번째 깃발을 세우고 모든 영웅을 감시하려 한다. 연화는 무명회의 기록소에서 재의 장부를 발견하고, 장부의 마지막 빈 페이지가 무명회 자신의 죄를 기록할 자리임을 폭로한다. 그녀는 세 세력의 기록을 모두 공개해 누구도 역사를 독점하지 못하게 한다. 이 결말에서 승자는 없지만, 어떤 세력도 처음부터 옳았다고 주장할 수 없게 된다.",
+    "originalContent": true,
+    "sourceRef": null,
+    "inspirationSources": ["original-lore", "jeonuchi-honggildong-adaptation"],
+    "relatedCodexIds": ["yeonhwa-codex", "unnamed-society-codex"],
+    "storyArc": "side-story"
+  }
+]

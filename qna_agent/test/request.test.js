@@ -5,7 +5,7 @@ import { validateAgentRequest, validateAskRequest } from '../src/request.js';
 test('허용된 mode와 질문을 검증한다', () => {
   assert.deepEqual(
     validateAskRequest({ mode: 'dev-guide', question: '팔레트를 추천해줘' }),
-    { mode: 'dev-guide', question: '팔레트를 추천해줘', context: {} },
+    { mode: 'dev-guide', locale: 'ko', question: '팔레트를 추천해줘', context: {} },
   );
 });
 
