@@ -13,6 +13,13 @@ export async function createVideoAgentTask(message: string, assignee?: string): 
   return response.json();
 }
 
+export async function listVideoAgentTasks(assignee: string): Promise<Task[]> {
+  const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks?assignee=${encodeURIComponent(assignee)}`);
+  if (!response.ok) throw new Error(`video-agent task list failed: HTTP ${response.status}`);
+  const payload = await response.json();
+  return payload.tasks as Task[];
+}
+
 export class VideoAgentTaskNotFoundError extends Error {}
 
 export async function getVideoAgentTask(taskId: string): Promise<Task> {

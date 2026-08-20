@@ -5,6 +5,7 @@ import { ComposerTabs } from "./ComposerTabs";
 import { FormComposer } from "./FormComposer";
 import { StatusBadge } from "./StatusBadge";
 import { TaskCanvas } from "./TaskCanvas";
+import { VideoGallery } from "./VideoGallery";
 import { cancelVideoAgentTask, createVideoAgentTask, resumeVideoAgentScene } from "./api";
 import { useVideoTaskPolling } from "./use-video-task-polling";
 import { buildUnresolvedScenes, markSceneStatus, mergeResumeResult, type UnresolvedScene } from "../resume-utils";
@@ -143,6 +144,7 @@ export function VideoAgentPage({ initialBrief, assignee }: { initialBrief?: stri
           <TaskCanvas task={task} unresolvedScenes={unresolvedScenes} onUploadScene={handleUploadScene} onRetry={handleRetry} />
         </main>
       </div>
+      <VideoGallery assignee={assignee} refreshKey={`${taskId ?? ""}-${task?.status.state ?? ""}`} />
     </>
   );
 }
