@@ -29,6 +29,17 @@ services:
       dev-agent:
         condition: service_started
 
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    # 브라우저에서 http://127.0.0.1:8000, :8100 등을 직접 호출하도록 하드코딩돼 있어서
+    # (App.tsx의 API_BASE_URL, workmate/api.ts의 WORKMATE_API_BASE_URL) 별도 프록시나
+    # 빌드 인자 없이 그냥 떠도 됨 - main-agent가 호스트 8000에 떠있기만 하면 됨.
+    depends_on:
+      main-agent:
+        condition: service_started
+
   workmate-agent:
     # 팀원(담당자) 요청 반영 - 실제 workmate-agent 소스를 이 저장소 안(workmate-agent/)에
     # vendoring해서 video/dev/qna_agent와 같은 방식으로 맞췄다. 이전엔 `../../workmate-agent`로
@@ -100,7 +111,7 @@ services:
     build: "../qna_agent"
     expose: ["3000"]
     env_file:
-      - "../qna_agent/.env"
+      - ".env"
     environment:
       PORT: "3000"
       AGENT_PUBLIC_URL: "http://game-qa-agent:3000"
