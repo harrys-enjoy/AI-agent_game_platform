@@ -14,5 +14,15 @@ export type TaskState =
 export type ArtifactPart = { text?: string; data?: Record<string, unknown>; mediaType?: string };
 export type Artifact = { artifactId: string; name: string; parts: ArtifactPart[] };
 export type TaskStatus = { state: TaskState; message?: { parts: ArtifactPart[] }; unresolvedScenes?: RawUnresolvedScene[] };
-export type Task = { id: string; contextId: string; status: TaskStatus; artifacts?: Artifact[] };
+export type Task = {
+  id: string;
+  contextId: string;
+  status: TaskStatus;
+  artifacts?: Artifact[];
+  brief?: string | null;
+  createdAt?: string;
+};
 export type MessageSendResponse = { task: Task } | { message: { parts: ArtifactPart[] } };
+export type TaskListResponse = { tasks: Task[]; has_more: boolean };
+export type TaskDetail = { task_id: string; brief: string | null; project: Record<string, unknown> | null };
+export type VeoUsage = { used: number; limit: number; resetsAt: string | null };

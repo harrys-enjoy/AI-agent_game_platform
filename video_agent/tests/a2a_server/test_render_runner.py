@@ -86,6 +86,65 @@ def test_run_render_task_sets_project_id_on_success():
     assert store.get(record.task_id).project_id == "proj_abc123"
 
 
+def test_run_render_task_links_partial_project_id_when_failure_carries_one():
+    """Regression: orchestrator.run_pipeline() saves each scene's progress to
+    project_store as it goes, but previously the task record never learned the
+    project_id on failure - "view details" showed nothing recoverable even
+    though earlier scenes' narrative/storyboard/prompts were actually saved.
+    VeoBackendError (and PipelineError) now carry a project_id attribute when
+    raised mid-pipeline; run_render_task must persist it before marking failed.
+    """
+
+    store = TaskStore()
+    record = store.create()
+
+    def failing_render(project_input: ProjectInput) -> Project:
+        error = VeoBackendError("429 RESOURCE_EXHAUSTED")
+        error.project_id = "proj_partial123"
+        raise error
+
+    run_render_task(store, record.task_id, _project_input(), "http://localhost:8002", render_fn=failing_render)
+
+    updated = store.get(record.task_id)
+    assert updated.state == "TASK_STATE_FAILED"
+    assert updated.project_id == "proj_partial123"
+
+
+def test_run_render_task_does_not_set_project_id_when_failure_has_none():
+    """A failure before any Project ever existed (e.g. agent construction)
+    has nothing to link - must not crash and must leave project_id unset."""
+
+    store = TaskStore()
+    record = store.create()
+
+    def failing_render(project_input: ProjectInput) -> Project:
+        raise VeoBackendError("no project ever created")
+
+    run_render_task(store, record.task_id, _project_input(), "http://localhost:8002", render_fn=failing_render)
+
+    assert store.get(record.task_id).project_id is None
+
+
+def test_run_render_task_links_project_id_even_when_canceled_after_success():
+    """Regression: project_id was previously linked *after* the should_cancel()
+    check, so a task canceled mid-render (but whose render_fn still returned a
+    full Project) lost the link entirely - "view details" showed nothing even
+    though the pipeline actually produced real data."""
+
+    store = TaskStore()
+    record = store.create()
+    store.request_cancel(record.task_id)
+
+    def fake_render(project_input: ProjectInput) -> Project:
+        return Project(project_id="proj_canceled123", input=project_input)
+
+    run_render_task(store, record.task_id, _project_input(), "http://localhost:8002", render_fn=fake_render)
+
+    updated = store.get(record.task_id)
+    assert updated.state == "TASK_STATE_CANCELED"
+    assert updated.project_id == "proj_canceled123"
+
+
 def test_run_render_task_marks_input_required_with_unresolved_scenes_message():
     store = TaskStore()
     record = store.create()

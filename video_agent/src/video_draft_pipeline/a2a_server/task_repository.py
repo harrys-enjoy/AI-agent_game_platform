@@ -17,8 +17,9 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+from uuid import uuid4
 
-from .tasks import TaskRecord
+from .tasks import TaskRecord, _now_iso
 
 TASK_DB_PATH_ENV = "VIDEO_AGENT_TASK_DB_PATH"
 _DEFAULT_DB_PATH = ".runtime/tasks.sqlite3"
@@ -30,18 +31,22 @@ class SQLiteTaskRepository:
     def __init__(self, database_path: str | Path = ":memory:") -> None:
         self.database_path = str(database_path)
         self._use_uri = self.database_path == ":memory:"
+        # Plain sqlite3.connect(":memory:") gives every connection its own
+        # isolated, empty database - a named shared-cache URI is required so
+        # repeated _connect() calls (save() then load_all(), etc.) see the
+        # same in-memory data. Same trick as SQLiteGoogleCredentialRepository
+        # in workmate-agent.
+        self._connection_target = (
+            f"file:video-agent-tasks-{uuid4().hex}?mode=memory&cache=shared" if self._use_uri else self.database_path
+        )
         if not self._use_uri:
             Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         else:
-            # Keep one connection alive for the process lifetime so the
-            # in-memory database isn't dropped between calls (sqlite3
-            # :memory: is per-connection) - same trick as
-            # SQLiteGoogleCredentialRepository.
-            self._anchor = sqlite3.connect(self.database_path)
+            self._anchor = sqlite3.connect(self._connection_target, uri=True)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path)
+        connection = sqlite3.connect(self._connection_target, uri=self._use_uri)
         connection.row_factory = sqlite3.Row
         return connection
 
@@ -66,20 +71,31 @@ class SQLiteTaskRepository:
                 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
                 """
             )
+            # Migration for DBs created before `brief`/`created_at` existed - CREATE
+            # TABLE IF NOT EXISTS above doesn't add columns to an existing table.
+            existing_columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+            if "brief" not in existing_columns:
+                connection.execute("ALTER TABLE tasks ADD COLUMN brief TEXT")
+            if "created_at" not in existing_columns:
+                # Pre-existing rows have no real creation time on record - fall back
+                # to updated_at (better than leaving it NULL and confusing the UI).
+                connection.execute("ALTER TABLE tasks ADD COLUMN created_at TEXT")
+                connection.execute("UPDATE tasks SET created_at = updated_at WHERE created_at IS NULL")
 
     def save(self, record: TaskRecord) -> None:
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO tasks(task_id, context_id, state, answer, detail, project_id,
-                    unresolved_scenes, output_video_url, cancel_requested, artifact_id, user_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    unresolved_scenes, output_video_url, cancel_requested, artifact_id, user_id, brief,
+                    created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     context_id=excluded.context_id, state=excluded.state, answer=excluded.answer,
                     detail=excluded.detail, project_id=excluded.project_id,
                     unresolved_scenes=excluded.unresolved_scenes, output_video_url=excluded.output_video_url,
                     cancel_requested=excluded.cancel_requested, artifact_id=excluded.artifact_id,
-                    user_id=excluded.user_id, updated_at=excluded.updated_at
+                    user_id=excluded.user_id, brief=excluded.brief, updated_at=excluded.updated_at
                 """,
                 (
                     record.task_id,
@@ -93,21 +109,31 @@ class SQLiteTaskRepository:
                     int(record.cancel_requested),
                     record.artifact_id,
                     record.user_id,
+                    record.brief,
+                    record.created_at,
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+
+    def delete(self, task_id: str) -> None:
+        with closing(self._connect()) as connection, connection:
+            connection.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
 
     def load_all(self) -> list[TaskRecord]:
         with closing(self._connect()) as connection:
             rows = connection.execute("SELECT * FROM tasks").fetchall()
         return [_row_to_record(row) for row in rows]
 
-    def list_for_user(self, user_id: str) -> list[TaskRecord]:
+    def list_for_user(self, user_id: str, limit: int = 20, offset: int = 0) -> tuple[list[TaskRecord], bool]:
         with closing(self._connect()) as connection:
+            # Fetch one extra row to detect whether another page exists,
+            # without a separate COUNT(*) query.
             rows = connection.execute(
-                "SELECT * FROM tasks WHERE user_id = ? ORDER BY updated_at DESC", (user_id,)
+                "SELECT * FROM tasks WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (user_id, limit + 1, offset),
             ).fetchall()
-        return [_row_to_record(row) for row in rows]
+        has_more = len(rows) > limit
+        return [_row_to_record(row) for row in rows[:limit]], has_more
 
 
 def _row_to_record(row: sqlite3.Row) -> TaskRecord:
@@ -123,6 +149,8 @@ def _row_to_record(row: sqlite3.Row) -> TaskRecord:
         cancel_requested=bool(row["cancel_requested"]),
         artifact_id=row["artifact_id"],
         user_id=row["user_id"],
+        brief=row["brief"] if "brief" in row.keys() else None,
+        created_at=row["created_at"] if "created_at" in row.keys() and row["created_at"] else _now_iso(),
     )
 
 

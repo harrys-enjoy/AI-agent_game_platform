@@ -1,6 +1,11 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Protocol
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass
@@ -16,6 +21,8 @@ class TaskRecord:
     cancel_requested: bool = False
     artifact_id: str | None = None
     user_id: str | None = None
+    brief: str | None = None
+    created_at: str = field(default_factory=_now_iso)
 
 
 class TaskRepository(Protocol):
@@ -25,7 +32,9 @@ class TaskRepository(Protocol):
 
     def load_all(self) -> list[TaskRecord]: ...
 
-    def list_for_user(self, user_id: str) -> list[TaskRecord]: ...
+    def list_for_user(self, user_id: str, limit: int, offset: int) -> tuple[list[TaskRecord], bool]: ...
+
+    def delete(self, task_id: str) -> None: ...
 
 
 class TaskStore:
@@ -41,22 +50,33 @@ class TaskStore:
         if self._repository is not None:
             self._repository.save(self._tasks[task_id])
 
-    def create(self, user_id: str | None = None) -> TaskRecord:
+    def create(self, user_id: str | None = None, brief: str | None = None) -> TaskRecord:
         task_id = f"task_{uuid.uuid4().hex[:8]}"
-        record = TaskRecord(task_id=task_id, context_id=f"ctx_{uuid.uuid4().hex[:8]}", user_id=user_id)
+        record = TaskRecord(task_id=task_id, context_id=f"ctx_{uuid.uuid4().hex[:8]}", user_id=user_id, brief=brief)
         self._tasks[task_id] = record
         self._persist(task_id)
         return record
 
-    def list_for_user(self, user_id: str) -> list[TaskRecord]:
-        """Most-recent-first, matching the repository's own ordering."""
+    def list_for_user(self, user_id: str, limit: int = 20, offset: int = 0) -> tuple[list[TaskRecord], bool]:
+        """Most-recent-first, matching the repository's own ordering.
+
+        Returns (records, has_more) - has_more tells the caller whether
+        another page exists past this one, for a "더 보기" button.
+        """
 
         if self._repository is not None:
-            return self._repository.list_for_user(user_id)
-        return [record for record in reversed(self._tasks.values()) if record.user_id == user_id]
+            return self._repository.list_for_user(user_id, limit, offset)
+        matching = [record for record in reversed(self._tasks.values()) if record.user_id == user_id]
+        page = matching[offset : offset + limit]
+        return page, offset + limit < len(matching)
 
     def get(self, task_id: str) -> TaskRecord | None:
         return self._tasks.get(task_id)
+
+    def delete(self, task_id: str) -> None:
+        self._tasks.pop(task_id, None)
+        if self._repository is not None:
+            self._repository.delete(task_id)
 
     def mark_working(self, task_id: str) -> None:
         self._tasks[task_id].state = "TASK_STATE_WORKING"

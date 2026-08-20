@@ -162,7 +162,9 @@ def run_pipeline(
     try:
         duration_guard(scenes, project_input.max_duration_sec)
     except DurationExceededError as exc:
-        raise PipelineError(str(exc)) from exc
+        error = PipelineError(str(exc))
+        error.project_id = project.project_id
+        raise error from exc
 
     canceled = False
     for scene in scenes:
@@ -211,7 +213,18 @@ def run_pipeline(
             try:
                 render_result = render_agent.run(scene, running_cost, project_input.max_budget_usd)
             except BudgetExceededError as exc:
-                raise PipelineError(str(exc)) from exc
+                error = PipelineError(str(exc))
+                error.project_id = project.project_id
+                raise error from exc
+            except Exception as exc:
+                # Tag whatever the backend raised (VeoBackendError, LTXBackendError,
+                # ...) with the project_id before it escapes run_pipeline() - by
+                # this point earlier scenes (narrative/storyboard/prompts/images)
+                # are already saved to project_store under this id, so the caller
+                # can still link a failed task back to that partial progress
+                # instead of losing it (render_runner.py reads exc.project_id).
+                exc.project_id = project.project_id
+                raise
             scene.render = render_result
             running_cost += render_result.cost_usd
 

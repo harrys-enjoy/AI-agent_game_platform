@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 from urllib.parse import unquote
@@ -25,6 +26,7 @@ from .protocol import (
 from .render_runner import build_unresolved_scenes, default_resume_render_agent, run_render_task
 from .task_repository import task_repository
 from .tasks import TaskStore
+from .veo_usage_repository import SQLiteVeoUsageRepository, daily_limit, veo_usage_repository
 from ..agents.errors import MissingAPIKeyError
 from ..agents.video_render_agent import VideoRenderAgent
 from ..image_normalize import ImageNormalizeError, normalize_image_bytes
@@ -60,7 +62,7 @@ def _task_response(record, media_public_base_url: str) -> dict:
         artifacts = [build_video_artifact(record.artifact_id, record.answer, record.output_video_url)]
     elif record.state == TaskState.INPUT_REQUIRED.value and record.unresolved_scenes:
         artifacts = [build_unresolved_artifact(record.artifact_id, record.unresolved_scenes)]
-    return build_task_response(
+    response = build_task_response(
         record.task_id,
         record.context_id,
         record.state,
@@ -69,6 +71,21 @@ def _task_response(record, media_public_base_url: str) -> dict:
         unresolved_scenes=record.unresolved_scenes if record.state == TaskState.INPUT_REQUIRED.value else None,
         artifacts=artifacts,
     )
+    response["task"]["brief"] = record.brief
+    response["task"]["createdAt"] = record.created_at
+    return response
+
+
+def _media_relative_path(url: str | None) -> str | None:
+    """`record.output_video_url` is a full URL (media_public_base_url + the
+    /media/ StaticFiles mount + the on-disk-relative path) - strip down to
+    just the part that's actually relative to media_dir on disk."""
+
+    if not url:
+        return None
+    marker = "/media/"
+    index = url.find(marker)
+    return url[index + len(marker) :] if index != -1 else None
 
 
 def create_app(
@@ -80,13 +97,14 @@ def create_app(
     render_fn: Callable[[ProjectInput], Project] | None = None,
     project_store: ProjectStore | None = None,
     resume_render_agent_fn: Callable[[], VideoRenderAgent] = default_resume_render_agent,
+    usage_repository: SQLiteVeoUsageRepository | None = None,
 ) -> FastAPI:
     internal_url = self_internal_url or os.environ.get("SELF_INTERNAL_URL", "http://video-agent:8002")
-    # NOTE: this default is plain in-memory on purpose - test_app_scaffold.py calls
-    # create_app() with no task_store override, and shouldn't touch a real SQLite
-    # file on disk. The real server wires persistence explicitly at the bottom of
-    # this module (`app = create_app(task_store=TaskStore(repository=task_repository()))`).
+    # NOTE: these defaults are plain in-memory on purpose - test_app_scaffold.py calls
+    # create_app() with no overrides, and shouldn't touch real SQLite files on disk.
+    # The real server wires persistence explicitly at the bottom of this module.
     store = task_store or TaskStore()
+    usage_store = usage_repository or SQLiteVeoUsageRepository()
     media_url = media_public_base_url or os.environ.get("MEDIA_PUBLIC_BASE_URL", "http://localhost:8002")
     store_for_projects = project_store or ProjectStore(str(Path(media_dir) / "a2a_server" / "projects"))
 
@@ -105,6 +123,20 @@ def create_app(
     def agent_card() -> dict:
         return build_agent_card(internal_url)
 
+    @app.get("/a2a/veo-usage", dependencies=[Depends(require_a2a_auth)])
+    def get_veo_usage():
+        """Local call count, not Google's real quota - aistudio.google.com/rate-limit
+        isn't reachable via the Developer API (see veo_usage_repository.py docstring).
+        Only counts calls made through this app's own VeoBackend instances."""
+
+        limit = daily_limit()
+        used = usage_store.count_recent()
+        oldest = usage_store.oldest_recent_call_at()
+        resets_at = None
+        if oldest:
+            resets_at = (datetime.fromisoformat(oldest) + timedelta(hours=24)).isoformat()
+        return {"used": used, "limit": limit, "resetsAt": resets_at}
+
     @app.get("/a2a/tasks/{task_id}", dependencies=[Depends(require_a2a_auth)])
     def get_task(task_id: str):
         record = store.get(task_id)
@@ -113,8 +145,53 @@ def create_app(
         return _task_response(record, media_url)
 
     @app.get("/a2a/tasks", dependencies=[Depends(require_a2a_auth)])
-    def list_tasks(user_id: str):
-        return {"tasks": [_task_response(record, media_url) for record in store.list_for_user(user_id)]}
+    def list_tasks(user_id: str, limit: int = 20, offset: int = 0):
+        records, has_more = store.list_for_user(user_id, limit=limit, offset=offset)
+        # _task_response() wraps its result as {"task": {...}} for the single-task
+        # endpoints - unwrap here so each list entry is the flat task object itself.
+        return {"tasks": [_task_response(record, media_url)["task"] for record in records], "has_more": has_more}
+
+    @app.get("/a2a/tasks/{task_id}/detail", dependencies=[Depends(require_a2a_auth)])
+    def get_task_detail(task_id: str):
+        """Full generation record for one task - the narrative/storyboard/prompts
+        the pipeline actually produced, for a "view details" panel on a gallery
+        thumbnail. Reads the already-persisted Project JSON (project_store.py) via
+        the task's linked project_id - no changes to the render pipeline itself.
+        """
+
+        record = store.get(task_id)
+        if record is None:
+            return error_response("NOT_FOUND", f"Unknown task: {task_id}")
+        if record.project_id is None:
+            return {"task_id": task_id, "brief": record.brief, "project": None}
+        try:
+            project = store_for_projects.load(record.project_id)
+        except ProjectStoreError:
+            return {"task_id": task_id, "brief": record.brief, "project": None}
+        return {"task_id": task_id, "brief": record.brief, "project": project.model_dump(mode="json")}
+
+    @app.delete("/a2a/tasks/{task_id}", dependencies=[Depends(require_a2a_auth)])
+    def delete_task(task_id: str):
+        """Deletes the task record, its output video file, and its stored
+        project (narrative/storyboard/prompts) JSON - not just the DB row.
+        Refuses tasks still in progress: the background render still holds a
+        reference to this task_id and would KeyError trying to update a
+        deleted record - cancel first, then delete.
+        """
+
+        record = store.get(task_id)
+        if record is None:
+            return error_response("NOT_FOUND", f"Unknown task: {task_id}")
+        if record.state in (TaskState.SUBMITTED.value, TaskState.WORKING.value):
+            return error_response("INVALID_ARGUMENT", "Cannot delete a task that is still in progress - cancel it first")
+
+        relative_video_path = _media_relative_path(record.output_video_url)
+        if relative_video_path:
+            (Path(media_dir) / relative_video_path).unlink(missing_ok=True)
+        if record.project_id:
+            store_for_projects.delete(record.project_id)
+        store.delete(task_id)
+        return {"deleted": task_id}
 
     @app.post("/a2a/message:send", dependencies=[Depends(require_a2a_auth)])
     async def message_send(
@@ -163,7 +240,7 @@ def create_app(
                 return error_response("INVALID_ARGUMENT", str(exc))
 
             user_id = unquote(x_video_agent_user) if x_video_agent_user else None
-            record = store.create(user_id=user_id)
+            record = store.create(user_id=user_id, brief=text)
             store.register_message_id(message.messageId, record.task_id)
             registered = True
             store.mark_working(record.task_id)
@@ -252,4 +329,4 @@ def create_app(
     return app
 
 
-app = create_app(task_store=TaskStore(repository=task_repository()))
+app = create_app(task_store=TaskStore(repository=task_repository()), usage_repository=veo_usage_repository())

@@ -30,3 +30,9 @@ class ProjectStore:
             raise ProjectStoreError(
                 f"Stored project file for project_id={project_id!r} is corrupt: {exc}"
             ) from exc
+
+    def delete(self, project_id: str) -> None:
+        """No-op if the project file doesn't exist - deleting a task whose
+        project was never saved (e.g. failed before rendering) is fine."""
+
+        self._path_for(project_id).unlink(missing_ok=True)

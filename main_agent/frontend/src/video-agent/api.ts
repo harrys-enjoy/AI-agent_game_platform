@@ -1,5 +1,5 @@
 import { buildResumeFormData, type ResumeResult } from "../resume-utils";
-import type { MessageSendResponse, Task } from "./types";
+import type { MessageSendResponse, Task, TaskDetail, TaskListResponse, VeoUsage } from "./types";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -13,11 +13,18 @@ export async function createVideoAgentTask(message: string, assignee?: string): 
   return response.json();
 }
 
-export async function listVideoAgentTasks(assignee: string): Promise<Task[]> {
-  const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks?assignee=${encodeURIComponent(assignee)}`);
+export async function listVideoAgentTasks(assignee: string, limit = 20, offset = 0): Promise<TaskListResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/video-agent/tasks?assignee=${encodeURIComponent(assignee)}&limit=${limit}&offset=${offset}`,
+  );
   if (!response.ok) throw new Error(`video-agent task list failed: HTTP ${response.status}`);
-  const payload = await response.json();
-  return payload.tasks as Task[];
+  return response.json();
+}
+
+export async function getVideoAgentTaskDetail(taskId: string): Promise<TaskDetail> {
+  const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks/${encodeURIComponent(taskId)}/detail`);
+  if (!response.ok) throw new Error(`video-agent task detail fetch failed: HTTP ${response.status}`);
+  return response.json();
 }
 
 export class VideoAgentTaskNotFoundError extends Error {}
@@ -35,6 +42,17 @@ export async function cancelVideoAgentTask(taskId: string): Promise<Task> {
   if (!response.ok) throw new Error(`video-agent task cancel failed: HTTP ${response.status}`);
   const payload = await response.json();
   return payload.task as Task;
+}
+
+export async function getVeoUsage(): Promise<VeoUsage> {
+  const response = await fetch(`${API_BASE_URL}/api/video-agent/veo-usage`);
+  if (!response.ok) throw new Error(`video-agent usage fetch failed: HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function deleteVideoAgentTask(taskId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/video-agent/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(`video-agent task delete failed: HTTP ${response.status}`);
 }
 
 export async function resumeVideoAgentScene(taskId: string, sceneId: string, file: File): Promise<ResumeResult> {

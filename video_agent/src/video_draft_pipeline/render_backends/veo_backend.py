@@ -42,6 +42,7 @@ class VeoBackend:
         client: genai.Client | None = None,
         output_dir: str | Path = "media",
         poll_interval_sec: float = 10.0,
+        usage_repository=None,
     ):
         if tier not in PRICE_PER_SEC_USD:
             raise ValueError(f"Unknown Veo tier: {tier}")
@@ -65,6 +66,7 @@ class VeoBackend:
         self._client = client or genai.Client(api_key=resolved_key)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._usage_repository = usage_repository
 
     def render(self, candidate: Candidate, motion_prompt: str, duration_sec: float) -> RenderResult:
         requested_duration = _round_to_allowed_duration(duration_sec)
@@ -88,6 +90,12 @@ class VeoBackend:
                     resolution=self.resolution,
                 ),
             )
+            # Reaching here means Google accepted the request - a 429
+            # RESOURCE_EXHAUSTED rejection would have raised out of
+            # generate_videos() above, so this only counts calls that
+            # actually consumed a quota unit, not rejected attempts.
+            if self._usage_repository is not None:
+                self._usage_repository.record_call()
             operation = self._poll_until_done(operation)
         except OSError as exc:
             raise VeoBackendError(
