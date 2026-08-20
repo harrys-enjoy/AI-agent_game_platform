@@ -5,6 +5,8 @@ import { ComposerTabs } from "./ComposerTabs";
 import { FormComposer } from "./FormComposer";
 import { StatusBadge } from "./StatusBadge";
 import { TaskCanvas } from "./TaskCanvas";
+import { VeoUsageBadge } from "./VeoUsageBadge";
+import { VideoGallery } from "./VideoGallery";
 import { cancelVideoAgentTask, createVideoAgentTask, resumeVideoAgentScene } from "./api";
 import { useVideoTaskPolling } from "./use-video-task-polling";
 import { buildUnresolvedScenes, markSceneStatus, mergeResumeResult, type UnresolvedScene } from "../resume-utils";
@@ -22,7 +24,7 @@ function readPersistedTask(): { taskId: string; startedAt: number } | null {
   }
 }
 
-export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {}) {
+export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string; owner?: string } = {}) {
   const [taskId, setTaskId] = useState<string | null>(() => readPersistedTask()?.taskId ?? null);
   const [startedAt, setStartedAt] = useState(() => readPersistedTask()?.startedAt ?? Date.now());
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
     setClarifyingQuestion(null);
     setSubmitting(true);
     try {
-      const response = await createVideoAgentTask(message);
+      const response = await createVideoAgentTask(message, owner);
       if ("task" in response) {
         setTaskId(response.task.id);
         setStartedAt(Date.now());
@@ -101,6 +103,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
           <p className="eyebrow">MAIN AGENT / VIDEO GENERATION</p>
           <h1>영상 생성</h1>
         </div>
+        <VeoUsageBadge refreshKey={`${taskId ?? ""}-${task?.status.state ?? ""}`} />
       </div>
       <div className="grid grid-cols-[minmax(280px,360px)_1fr] gap-4">
         <aside className="flex min-h-[520px] flex-col gap-3 rounded-[15px] border border-brief-border bg-white p-4">
@@ -143,6 +146,7 @@ export function VideoAgentPage({ initialBrief }: { initialBrief?: string } = {})
           <TaskCanvas task={task} unresolvedScenes={unresolvedScenes} onUploadScene={handleUploadScene} onRetry={handleRetry} />
         </main>
       </div>
+      <VideoGallery owner={owner} refreshKey={`${taskId ?? ""}-${task?.status.state ?? ""}`} />
     </>
   );
 }

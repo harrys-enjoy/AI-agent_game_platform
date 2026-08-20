@@ -9,6 +9,7 @@ from ..orchestrator import PipelineError, first_accepted_image_url, format_candi
 from ..project_store import ProjectStore
 from ..render_backends.veo_backend import VeoBackend, VeoBackendError
 from ..schema import Project, ProjectInput
+from .veo_usage_repository import veo_usage_repository
 
 OUTPUT_DIR = "media/a2a_server"
 PROJECT_STORE_DIR = f"{OUTPUT_DIR}/projects"
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def default_render(project_input: ProjectInput, should_cancel: Callable[[], bool] | None = None) -> Project:
     agents = build_real_agents(output_dir=OUTPUT_DIR, log_path=f"{OUTPUT_DIR}/agent_log.jsonl")
-    backend = VeoBackend(tier="veo-3.1-fast", output_dir=OUTPUT_DIR)
+    backend = VeoBackend(tier="veo-3.1-fast", output_dir=OUTPUT_DIR, usage_repository=veo_usage_repository())
     project_store = ProjectStore(PROJECT_STORE_DIR)
     return run_pipeline(
         project_input, render_backend=backend, assemble=True, project_store=project_store,
@@ -27,7 +28,9 @@ def default_render(project_input: ProjectInput, should_cancel: Callable[[], bool
 
 
 def default_resume_render_agent() -> VideoRenderAgent:
-    return VideoRenderAgent(backend=VeoBackend(tier="veo-3.1-fast", output_dir=OUTPUT_DIR))
+    return VideoRenderAgent(
+        backend=VeoBackend(tier="veo-3.1-fast", output_dir=OUTPUT_DIR, usage_repository=veo_usage_repository())
+    )
 
 
 def _unresolved_scenes_message(project: Project, media_public_base_url: str, task_id: str) -> str:
@@ -78,21 +81,33 @@ def run_render_task(
     try:
         project = actual_render_fn(project_input)
     except (PipelineError, VeoBackendError, MissingAPIKeyError) as exc:
+        # Earlier scenes' narrative/storyboard/prompts/images may already be
+        # saved under this project_id even though the overall run failed -
+        # link it so the failure isn't a total dead end for "view details".
+        partial_project_id = getattr(exc, "project_id", None)
+        if partial_project_id:
+            task_store.set_project_id(task_id, partial_project_id)
         if not should_cancel():
             task_store.mark_failed(task_id, f"영상 생성에 실패했습니다: {exc}", detail=traceback.format_exc())
         return
-    except Exception:
+    except Exception as exc:
         logger.exception("render_runner: unexpected error during render")
+        partial_project_id = getattr(exc, "project_id", None)
+        if partial_project_id:
+            task_store.set_project_id(task_id, partial_project_id)
         if not should_cancel():
             task_store.mark_failed(
                 task_id, "영상 생성 중 알 수 없는 오류가 발생했습니다.", detail=traceback.format_exc()
             )
         return
 
+    # Link project_id before the cancellation check (not after) - a task
+    # canceled mid-render still produced real project data worth keeping
+    # visible, not just tasks that ran to full completion.
+    task_store.set_project_id(task_id, project.project_id)
+
     if should_cancel():
         return
-
-    task_store.set_project_id(task_id, project.project_id)
 
     if any(scene.needs_manual_fix for scene in project.scenes):
         unresolved = build_unresolved_scenes(project, media_public_base_url)

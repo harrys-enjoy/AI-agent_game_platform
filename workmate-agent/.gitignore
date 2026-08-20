@@ -12,3 +12,7 @@ runtime/
 *.log
 *.err
 *.out
+
+# 각자 로컬 전용 Google OAuth 클라이언트 시크릿/토큰 - 실제 자격증명이라 커밋 금지.
+# 각 개발자가 이 폴더를 직접 만들어 client_secret.json/token.json을 넣어야 한다.
+google-oauth-test/
