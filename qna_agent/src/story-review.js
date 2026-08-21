@@ -89,17 +89,22 @@ function normalizeReview(raw, evidence, usage, reviewId) {
   } catch {
     parsed = {
       verdict: 'review_required',
-      suggestions: [rawText || '스토리 본문, 사건 인과관계, 캐릭터 목표와 행동을 더 구체적으로 입력해 주세요.'],
+      suggestions: [/^```(?:json)?\s*[\[{]/i.test(rawText) || /^[\[{]/.test(rawText)
+        ? '검토 결과 형식을 해석하지 못했습니다. 스토리의 인과관계, 인물 목표, 세력 관계를 보완해 다시 검토해 주세요.'
+        : rawText || '스토리 본문, 사건 인과관계, 캐릭터 목표와 행동을 더 구체적으로 입력해 주세요.'],
     };
   }
   const arrays = ['continuityConflicts', 'timelineIssues', 'characterConsistency', 'factionConsistency', 'missingRelationships', 'suggestions'];
   const formatFinding = (item) => {
     if (typeof item === 'string') return item;
     if (item && typeof item === 'object') {
-      const content = typeof item.content === 'string' ? item.content.trim() : '';
+      const content = ['content', 'issue', 'message', 'description', 'detail']
+        .map((key) => typeof item[key] === 'string' ? item[key].trim() : '')
+        .find(Boolean) ?? '';
       const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
       if (content && reason) return `${content} — ${reason}`;
       if (content || reason) return content || reason;
+      return '검토 항목을 해석하지 못했습니다. 스토리 설정을 보완해 다시 검토해 주세요.';
     }
     return String(item ?? '').trim();
   };
