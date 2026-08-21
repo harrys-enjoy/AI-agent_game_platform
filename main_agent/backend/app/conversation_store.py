@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -11,6 +12,16 @@ def utc_now() -> str:
 
 class ConversationStore:
     def __init__(self, path: str = "main_agent.db"):
+        # FastAPI runs each sync endpoint in a worker thread, and every request
+        # shares this one `sqlite3.Connection` (`check_same_thread=False` just
+        # disables the safety check, it doesn't make the connection thread-safe).
+        # Without a lock, two requests racing `_conversation()`'s SELECT-then-INSERT
+        # can both miss the SELECT and then collide on the UNIQUE(agent_name, owner)
+        # constraint, and interleaved cursor use on the same connection can also
+        # raise `sqlite3.InterfaceError: bad parameter or other API misuse` (both seen
+        # in production logs 2026-08-21). `RLock` so `current_session`/`reset`, which
+        # call `_conversation()` while already holding the lock, don't deadlock.
+        self._lock = threading.RLock()
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute(
             """CREATE TABLE IF NOT EXISTS conversations (
@@ -68,18 +79,28 @@ class ConversationStore:
 
     def _conversation(self, agent_name: str, owner: str = "default") -> tuple[str, str]:
         owner = owner or "default"
-        row = self.db.execute("SELECT id, current_session_id FROM assignee_conversations WHERE agent_name=? AND owner=?", (agent_name, owner)).fetchone()
-        if row:
-            return row[0], row[1]
-        conversation_id = str(uuid.uuid4())
-        session_id = str(uuid.uuid4())
-        now = utc_now()
-        self.db.execute(
-            "INSERT INTO assignee_conversations(id,agent_name,owner,current_session_id,created_at,updated_at) VALUES (?,?,?,?,?,?)",
-            (conversation_id, agent_name, owner, session_id, now, now),
-        )
-        self.db.commit()
-        return conversation_id, session_id
+        with self._lock:
+            row = self.db.execute("SELECT id, current_session_id FROM assignee_conversations WHERE agent_name=? AND owner=?", (agent_name, owner)).fetchone()
+            if row:
+                return row[0], row[1]
+            conversation_id = str(uuid.uuid4())
+            session_id = str(uuid.uuid4())
+            now = utc_now()
+            try:
+                self.db.execute(
+                    "INSERT INTO assignee_conversations(id,agent_name,owner,current_session_id,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                    (conversation_id, agent_name, owner, session_id, now, now),
+                )
+                self.db.commit()
+            except sqlite3.IntegrityError:
+                # 다른 스레드가 이 락을 기다리는 동안 같은 (agent_name, owner)로 먼저
+                # 만들어 넣었을 수 있다 — 새로 만들지 말고 그 행을 읽어서 쓴다.
+                self.db.rollback()
+                row = self.db.execute("SELECT id, current_session_id FROM assignee_conversations WHERE agent_name=? AND owner=?", (agent_name, owner)).fetchone()
+                if row:
+                    return row[0], row[1]
+                raise
+            return conversation_id, session_id
 
     def append(
         self,
@@ -90,33 +111,35 @@ class ConversationStore:
         owner: str = "default",
         pending_action: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        conversation_id, current_session_id = self._conversation(agent_name, owner)
-        session_id = session_id or current_session_id
-        metadata_json = json.dumps({"pending_action": pending_action}, ensure_ascii=False) if pending_action else None
-        message = {
-            "id": str(uuid.uuid4()),
-            "conversation_id": conversation_id,
-            "session_id": session_id,
-            "role": role,
-            "content": content,
-            "created_at": utc_now(),
-            "pending_action": pending_action,
-        }
-        self.db.execute(
-            "INSERT INTO messages(id,conversation_id,session_id,role,content,created_at,metadata) VALUES (?,?,?,?,?,?,?)",
-            (message["id"], conversation_id, session_id, role, content, message["created_at"], metadata_json),
-        )
-        self.db.execute("UPDATE assignee_conversations SET updated_at=? WHERE id=?", (message["created_at"], conversation_id))
-        self.db.commit()
+        with self._lock:
+            conversation_id, current_session_id = self._conversation(agent_name, owner)
+            session_id = session_id or current_session_id
+            metadata_json = json.dumps({"pending_action": pending_action}, ensure_ascii=False) if pending_action else None
+            message = {
+                "id": str(uuid.uuid4()),
+                "conversation_id": conversation_id,
+                "session_id": session_id,
+                "role": role,
+                "content": content,
+                "created_at": utc_now(),
+                "pending_action": pending_action,
+            }
+            self.db.execute(
+                "INSERT INTO messages(id,conversation_id,session_id,role,content,created_at,metadata) VALUES (?,?,?,?,?,?,?)",
+                (message["id"], conversation_id, session_id, role, content, message["created_at"], metadata_json),
+            )
+            self.db.execute("UPDATE assignee_conversations SET updated_at=? WHERE id=?", (message["created_at"], conversation_id))
+            self.db.commit()
         return message
 
     def list_messages(self, agent_name: str, session_id: str | None = None, owner: str = "default") -> list[dict[str, Any]]:
-        conversation_id, current_session_id = self._conversation(agent_name, owner)
-        session_id = session_id or current_session_id
-        rows = self.db.execute(
-            "SELECT id, conversation_id, session_id, role, content, created_at, metadata FROM messages WHERE conversation_id=? AND session_id=? ORDER BY created_at, rowid",
-            (conversation_id, session_id),
-        ).fetchall()
+        with self._lock:
+            conversation_id, current_session_id = self._conversation(agent_name, owner)
+            session_id = session_id or current_session_id
+            rows = self.db.execute(
+                "SELECT id, conversation_id, session_id, role, content, created_at, metadata FROM messages WHERE conversation_id=? AND session_id=? ORDER BY created_at, rowid",
+                (conversation_id, session_id),
+            ).fetchall()
         messages: list[dict[str, Any]] = []
         for row in rows:
             metadata_json = row[6]
@@ -133,8 +156,9 @@ class ConversationStore:
         return self._conversation(agent_name, owner)[1]
 
     def reset(self, agent_name: str, owner: str = "default") -> str:
-        conversation_id, _ = self._conversation(agent_name, owner)
-        session_id = str(uuid.uuid4())
-        self.db.execute("UPDATE assignee_conversations SET current_session_id=?, updated_at=? WHERE id=?", (session_id, utc_now(), conversation_id))
-        self.db.commit()
+        with self._lock:
+            conversation_id, _ = self._conversation(agent_name, owner)
+            session_id = str(uuid.uuid4())
+            self.db.execute("UPDATE assignee_conversations SET current_session_id=?, updated_at=? WHERE id=?", (session_id, utc_now(), conversation_id))
+            self.db.commit()
         return session_id

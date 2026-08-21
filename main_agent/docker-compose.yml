@@ -63,6 +63,7 @@ services:
     environment:
       WORKMATE_SERVICE_TOKEN: "${WORKMATE_SERVICE_TOKEN:?WORKMATE_SERVICE_TOKEN must be set}"
       APP_BASE_URL: "http://workmate-agent:8001/a2a"
+      DATABASE_URL: "postgresql://workmate:workmate@postgres:5432/workmate"
       # 컨테이너 안에서는 `Path(__file__).resolve().parents[3]` 기반 기본 토큰 경로 추정
       # (`app/workflows/daily_briefing.py`, `app/workflows/assistant_skills.py`)이 리포
       # 레이아웃과 안 맞아 항상 빗나간다 - 아래 볼륨 마운트 경로를 명시적으로 지정한다.
@@ -72,6 +73,9 @@ services:
       # 그때마다 재로그인해서 이 파일을 다시 받아야 한다).
       GOOGLE_TOKEN_FILE: "/app/google-oauth-test/token.json"
       GOOGLE_CLIENT_SECRET_FILE: "/app/google-oauth-test/client_secret.json"
+    depends_on:
+      postgres:
+        condition: service_healthy
     # `.runtime/`은 workmate-agent 저장소(vendored copy 포함)에서 항상 gitignore 대상이라
     # 컨테이너를 새로 띄우면 비어 있는 SQLite로 시작한다 - 이 저장소를 clone만 받은 사람에게는
     # 정상 동작(빈 상태로 시작)이다. 로컬에서 `python -m app.server`로 workmate-agent를 따로
@@ -93,6 +97,20 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: workmate
+      POSTGRES_PASSWORD: workmate
+      POSTGRES_DB: workmate
+    volumes:
+      - "../workmate-agent/migrations:/docker-entrypoint-initdb.d:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workmate -d workmate"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   video-agent:
     build: ../video_agent
