@@ -198,8 +198,23 @@ def test_main_route_returns_handoff_for_the_selected_agent(monkeypatch):
         "targetAgent": "workmate-agent",
         "targetChat": "Workmate AI",
         "originalRequest": "오늘 브리핑 해줘",
-        "handoff": True,
+        "handoff": "automatic",
     }
+
+
+def test_main_route_requires_confirmation_for_video_generation(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            return {"selected_agents": ["video-agent"], "confidence": 0.97}
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post("/api/main-route", json={"content": "영상 초안을 만들어줘"})
+
+    assert response.status_code == 200
+    assert response.json()["targetChat"] == "Video Generation"
+    assert response.json()["handoff"] == "confirmation_required"
 
 
 def test_agent_chat_uses_its_explicit_agent_instead_of_rerouting(monkeypatch):

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -48,7 +48,7 @@ describe("App - Video Generation sidebar entry", () => {
     expect(screen.queryByPlaceholderText("무엇을 도와드릴까요?")).not.toBeInTheDocument();
   });
 
-  it("routes away from Video Generation when the routing chatbot matches a different agent", async () => {
+  it("keeps Video Generation open when its own chat mentions another agent domain", async () => {
     render(<App />);
     await userEvent.click(screen.getByText("Video Generation"));
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
@@ -58,8 +58,7 @@ describe("App - Video Generation sidebar entry", () => {
     const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
     await userEvent.click(chatbotSubmit);
 
-    expect(await screen.findByPlaceholderText("Type a message...")).toBeInTheDocument();
-    expect(screen.queryByLabelText("영상 브리프")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
   });
 
   it("keeps the video-agent page in place when the routing chatbot gets a non-matching message", async () => {
@@ -75,7 +74,7 @@ describe("App - Video Generation sidebar entry", () => {
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
   });
 
-  it("shows the new Game Q&A story workspace immediately when routed there from Video Generation", async () => {
+  it("keeps Video Generation open when its own chat receives a story request", async () => {
     render(<App />);
     await userEvent.click(screen.getByText("Video Generation"));
     expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
@@ -85,6 +84,43 @@ describe("App - Video Generation sidebar entry", () => {
     const chatbotSubmit = chatbotInput.closest("form")?.querySelector("button[type='submit']") as HTMLButtonElement;
     await userEvent.click(chatbotSubmit);
 
-    expect(await screen.findByText("Story Review Workspace")).toBeInTheDocument();
+    expect(await screen.findByLabelText("영상 브리프")).toBeInTheDocument();
+  });
+
+  it("automatically sends an automatic Main handoff to the selected Agent Chat", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/api/chats/Workmate%20AI/reply")) {
+        return Promise.resolve({ ok: true, json: async () => ({ answer: "Workmate 브리핑 결과" }) });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    window.dispatchEvent(new CustomEvent("main-chat-route", {
+      detail: { chat: "Workmate AI", message: "오늘 브리핑 해줘", handoff: "automatic" },
+    }));
+
+    expect(await screen.findByText("Workmate 브리핑 결과")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/chats/Workmate%20AI/reply",
+      expect.objectContaining({ body: expect.stringContaining("오늘 브리핑 해줘") }),
+    );
+  });
+
+  it("prefills Video Generation without sending a confirmation-required Main handoff", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    window.dispatchEvent(new CustomEvent("main-chat-route", {
+      detail: { chat: "Video Generation", message: "할로윈 이벤트 영상", handoff: "confirmation_required" },
+    }));
+
+    expect(await screen.findByLabelText("영상 브리프")).toHaveValue("할로윈 이벤트 영상");
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/chats/Video%20Generation/reply"),
+      expect.anything(),
+    ));
   });
 });

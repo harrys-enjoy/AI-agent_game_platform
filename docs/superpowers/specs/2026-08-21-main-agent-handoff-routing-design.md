@@ -24,14 +24,14 @@ Main 전용 라우팅 요청은 사용자 원문을 받는다. 성공 응답은 
   "targetAgent": "workmate-agent",
   "targetChat": "Workmate AI",
   "originalRequest": "오늘 브리핑 해줘",
-  "handoff": true
+  "handoff": "automatic"
 }
 ```
 
 - `targetAgent`는 `workmate-agent`, `video-agent`, `dev-agent`, `game-qna-agent` 중 하나다.
 - `targetChat`은 해당 Agent의 UI 채팅 이름이다.
 - `originalRequest`는 trim 처리 외에 수정·요약·명령 변환을 하지 않은 사용자 원문이다.
-- `handoff`는 항상 `true`다.
+- `handoff`는 `automatic` 또는 `confirmation_required`다. Video Generation은 생성 비용·실행 확인이 필요하므로 항상 `confirmation_required`다.
 - 라우터가 신뢰 가능한 Agent를 선택하지 못하면 API는 성공 응답을 만들지 않고, Main UI는 답변 폴백 대신 담당 Agent를 판단하지 못했다는 상태만 표시한다.
 
 ## Data Flow
@@ -41,8 +41,9 @@ Main Chat 입력
   -> Main routing API
   -> { targetAgent, targetChat, originalRequest, handoff }
   -> targetChat 화면 전환
-  -> targetChat의 기존 reply API에 originalRequest 자동 전송
-  -> 선택된 Agent의 답변을 targetChat에 표시
+  -> automatic: targetChat의 기존 reply API에 originalRequest 자동 전송
+  -> confirmation_required: targetChat 입력에 originalRequest를 채움
+  -> 선택된 Agent가 응답 또는 실행 상태를 targetChat에 표시
 ```
 
 Main Chat에는 연결 상태 메시지만 남긴다. Agent의 응답 본문은 Main Chat에 복사하거나 저장하지 않는다.
@@ -59,7 +60,7 @@ Main Chat에는 연결 상태 메시지만 남긴다. Agent의 응답 본문은 
 1. `submitMainChat()`은 Main routing API만 호출한다. 기존 Main 답변 API 호출과 `createChatReply()` 폴백을 제거한다.
 2. routing 응답을 받으면 `targetChat`을 활성화하고, `originalRequest`를 기존 Agent Chat reply 흐름에 자동 전송한다.
 3. 자동 전달 중에는 target Agent Chat의 작업 상태를 `working`으로 보이고, 성공·실패 상태는 기존 Agent Chat 흐름과 동일하게 처리한다.
-4. Video Generation 화면도 handoff 원문을 기존 Video Agent Chat 경로로 전달한다. Main Chat이 영상 초안이나 영상 작업을 생성하지 않는다.
+4. Video Generation은 `confirmation_required`로 전환하고 원문만 영상 브리프 입력에 채운다. Main Chat은 영상 초안이나 영상 작업을 생성하지 않는다.
 
 ## Error Handling
 

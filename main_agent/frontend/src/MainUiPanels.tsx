@@ -77,16 +77,13 @@ export function TaskQuickActions({ variant, currentChat, onSelect, assigneeName,
   return <section className="task-quick-actions" aria-label="Workmate AI 업무 기능"><nav className="workmate-tabs">{cards.map((card) => <button type="button" className={card.id === selected.id ? "active" : ""} key={card.id} onClick={() => selectTab(card)}>{card.title}</button>)}</nav>{selected.id === "tasks" ? <TaskDetailPanel assigneeName={assigneeName} /> : selected.id === "recording" ? <RecordingDetailPanel assigneeName={assigneeName} onRecordingChange={handleRecordingChange} /> : selected.id === "meetings" ? <MeetingsDetailPanel assigneeName={assigneeName} /> : selected.id === "minutes" ? <MeetingSearchDetailPanel assigneeName={assigneeName} /> : <ProposalsDetailPanel assigneeName={assigneeName} />}</section>;
 }
 
-function routeMainRequest(request: string) {
-  const text = request.toLowerCase();
-  if (/영상|비디오|동영상|렌더|편집|자막|video|render|edit|motion/.test(text)) return "Video Generation";
-  if (/개발|코드|버그|오류|api|배포|프론트|백엔드|development|code|bug|debug/.test(text)) return "Development Assistant";
-  if (/게임|스토리|캐릭터|퀘스트|세계관|q&a|game|story|character|quest/.test(text)) return "Game Q&A";
-  if (/업무|할 일|회의|프로젝트|마감|정책|workmate|task|meeting|project/.test(text)) return "Workmate AI";
-  return null;
-}
-
 const MAIN_CHAT_API = "http://127.0.0.1:8000";
+type MainRoute = {
+  targetAgent: string;
+  targetChat: string;
+  originalRequest: string;
+  handoff: "automatic" | "confirmation_required";
+};
 
 export function MainBriefingChatbot({ contextHint, owner = window.localStorage.getItem("main-assignee") ?? "default" }: { contextHint?: string; owner?: string } = {}) {
   const [message, setMessage] = useState("");
@@ -114,23 +111,23 @@ export function MainBriefingChatbot({ contextHint, owner = window.localStorage.g
     setMessage("");
     setMessages((items) => [...items, { role: "user", text: request }]);
     persist("user", request);
-    const target = routeMainRequest(request);
-    if (target) {
-      const answer = `${target}로 연결합니다.`;
-      setMessages((items) => [...items, { role: "assistant", text: answer }]);
-      persist("assistant", answer);
-      window.dispatchEvent(new CustomEvent("main-chat-route", { detail: { chat: target, message: request } }));
-      return;
-    }
     setBusy(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/chats/Main Chatbot/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: request }) });
-      const data = response.ok ? await response.json() as { answer?: string } : {};
-      const answer = data.answer ?? "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다.";
+      const response = await fetch(`${MAIN_CHAT_API}/api/main-route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: request }),
+      });
+      if (!response.ok) throw new Error("Main route failed");
+      const route = await response.json() as MainRoute;
+      const answer = `${route.targetChat}로 연결합니다.`;
       setMessages((items) => [...items, { role: "assistant", text: answer }]);
       persist("assistant", answer);
+      window.dispatchEvent(new CustomEvent("main-chat-route", {
+        detail: { chat: route.targetChat, message: route.originalRequest, handoff: route.handoff },
+      }));
     } catch {
-      const answer = "질문을 확인했습니다. 업무와 관련된 내용이면 담당 Agent로 연결해 드립니다.";
+      const answer = "담당 Agent를 판단하지 못했습니다. 다시 요청해 주세요.";
       setMessages((items) => [...items, { role: "assistant", text: answer }]);
       persist("assistant", answer);
     } finally { setBusy(false); }

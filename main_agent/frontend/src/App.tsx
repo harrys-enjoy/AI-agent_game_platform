@@ -13,7 +13,6 @@ import { PoliciesPanel, QuickActions, ReferenceBriefingPanel, ReportPanel, TaskQ
 import { AssigneeAssignments, assigneeOptions, defaultAssignments, findAssignee } from "./assignee";
 import { AssigneeSwitcher } from "./AssigneeSwitcher";
 import { VideoAgentPage } from "./video-agent/VideoAgentPage";
-import { routeAgentRequest } from "./agent-routing";
 import GameQnaSummary from "./GameQnaSummary";
 import { normalizeAgentWorkTasks, syncGameQnaStoryReviewTask } from "./chat-task-utils";
 import { createRecentGameQnaWork, upsertRecentGameQnaWork, type RecentGameQnaWork } from "./game-qna-summary-utils";
@@ -85,9 +84,7 @@ export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [mainChat, setMainChat] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
-  const [mainMessage, setMainMessage] = useState("");
-  const [mainChatBusy, setMainChatBusy] = useState(false);
+  const [pendingMainHandoff, setPendingMainHandoff] = useState<{ chat: string; message: string } | null>(null);
   const [chatSessions, setChatSessions] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState("Today Briefing");
   const [activeChat, setActiveChat] = useState<string | null>(null);
@@ -184,26 +181,18 @@ export default function App() {
   }, [chat, currentChat]);
 
   useEffect(() => {
-    let cancelled = false;
-    setMainChat([]);
-    fetch(`${API_BASE_URL}/api/chats/Main%20Chatbot/session?owner=${encodeURIComponent(assigneeName)}`)
-      .then((response) => response.ok ? response.json() as Promise<{ messages: StoredMessage[] }> : Promise.reject(new Error("Main Chatbot history failed")))
-      .then((session) => {
-        if (!cancelled) setMainChat(session.messages.filter((item) => item.role === "user" || item.role === "assistant").map((item) => ({ role: item.role as "user" | "assistant", text: item.content })));
-      })
-      .catch(() => { if (!cancelled) setMainChat([]); });
-    return () => { cancelled = true; };
-  }, [assigneeName]);
-
-  useEffect(() => {
     function routeFromMain(event: Event) {
-      const detail = (event as CustomEvent<{ chat: string; message: string }>).detail;
+      const detail = (event as CustomEvent<{ chat: string; message: string; handoff: "automatic" | "confirmation_required" }>).detail;
       if (!detail?.chat) return;
       activateChatTask(detail.chat);
       activeChatRef.current = detail.chat;
       setActiveSection("Home");
       setActiveChat(detail.chat);
-      setMessage(detail.message);
+      if (detail.handoff === "automatic") {
+        setPendingMainHandoff({ chat: detail.chat, message: detail.message });
+      } else {
+        setMessage(detail.message);
+      }
     }
     window.addEventListener("main-chat-route", routeFromMain);
     return () => window.removeEventListener("main-chat-route", routeFromMain);
@@ -236,52 +225,15 @@ export default function App() {
     return () => { cancelled = true; };
   }, [currentChat, assigneeName]);
 
-  function persistMessage(role: "user" | "assistant", content: string, pendingAction?: PendingAction | null) {
-    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: currentSessionId, owner: assigneeName, pending_action: pendingAction ?? null }) }).catch(() => undefined);
-  }
+  useEffect(() => {
+    if (!pendingMainHandoff || currentChat !== pendingMainHandoff.chat) return;
+    setPendingMainHandoff(null);
+    void submitAgentRequest(pendingMainHandoff.chat, pendingMainHandoff.message);
+  }, [currentChat, pendingMainHandoff]);
 
-  function persistMainMessage(role: "user" | "assistant", content: string) {
-    void fetch(`${API_BASE_URL}/api/chats/Main%20Chatbot/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, owner: assigneeName }) }).catch(() => undefined);
-  }
-
-  function routeBriefingRequest(request: string) {
-    const text = request.toLowerCase();
-    if (/영상|비디오|동영상|렌더|편집|자막|video|render|edit|motion/.test(text)) return "Video Generation";
-    if (/개발|코드|버그|오류|api|배포|프론트|백엔드|development|code|bug|debug/.test(text)) return "Development Assistant";
-    if (/게임|스토리|캐릭터|퀘스트|세계관|q&a|game|story|character|quest/.test(text)) return "Game Q&A";
-    return "Workmate AI";
-  }
-
-  async function submitMainChat(event: FormEvent) {
-    event.preventDefault();
-    const request = mainMessage.trim();
-    if (!request || mainChatBusy) return;
-    setMainMessage("");
-    setMainChat((items) => [...items, { role: "user", text: request }]);
-    persistMainMessage("user", request);
-    const agent = routeBriefingRequest(request);
-    const isAgentRequest = agent !== "Workmate AI" || /업무|할 일|회의|프로젝트|마감|정책|workmate/i.test(request);
-    if (isAgentRequest) {
-      const target = agent === "Workmate AI" ? "Workmate AI" : agent;
-      activateChatTask(target);
-      const routingMessage = `${target}로 연결합니다.`;
-      setMainChat((items) => [...items, { role: "assistant", text: routingMessage }]);
-      persistMainMessage("assistant", routingMessage);
-      setTimeout(() => { activeChatRef.current = target; setActiveSection("Home"); setActiveChat(target); setMessage(request); }, 0);
-      return;
-    }
-    setMainChatBusy(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/chats/Main Chatbot/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: request }) });
-      const data = response.ok ? await response.json() as { answer?: string } : {};
-      const answer = data.answer ?? createChatReply(request);
-      setMainChat((items) => [...items, { role: "assistant", text: answer }]);
-      persistMainMessage("assistant", answer);
-    } catch {
-      const answer = createChatReply(request);
-      setMainChat((items) => [...items, { role: "assistant", text: answer }]);
-      persistMainMessage("assistant", answer);
-    } finally { setMainChatBusy(false); }
+  function persistMessage(role: "user" | "assistant", content: string, pendingAction?: PendingAction | null, chatName = currentChat) {
+    const sessionId = chatName === currentChat ? currentSessionId : undefined;
+    void fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(chatName)}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, content, session_id: sessionId, owner: assigneeName, pending_action: pendingAction ?? null }) }).catch(() => undefined);
   }
 
   async function resetChat() {
@@ -455,8 +407,12 @@ export default function App() {
         return;
       }
     }
-    const gameQnaCommand = currentChat === "Game Q&A" ? resolveChatCommand(request) : null;
-    if (currentChat === "Game Q&A") {
+    await submitAgentRequest(currentChat, request);
+  }
+
+  async function submitAgentRequest(responseChat: string, request: string) {
+    const gameQnaCommand = responseChat === "Game Q&A" ? resolveChatCommand(request) : null;
+    if (responseChat === "Game Q&A") {
       if (gameQnaCommand?.kind === "help") {
         setShowCommandHelp(true);
         return;
@@ -467,38 +423,25 @@ export default function App() {
         recordGameQnaWork(request, "검토 대기");
         window.dispatchEvent(new CustomEvent("game-qna-story-review", { detail: { content: draftContent } }));
         setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }, { id: `review-${Date.now()}`, kind: "text", text: "Story Review Workspace로 이동했습니다. 초안을 입력하고 검토를 실행하세요." }]);
-        persistMessage("user", request);
-        persistMessage("assistant", "Story Review Workspace로 이동했습니다. 초안을 입력하고 검토를 실행하세요.");
+        persistMessage("user", request, undefined, responseChat);
+        persistMessage("assistant", "Story Review Workspace로 이동했습니다. 초안을 입력하고 검토를 실행하세요.", undefined, responseChat);
         return;
       }
     }
-    const requestedAgent = gameQnaCommand?.kind === "request" && gameQnaCommand.command
-      ? null
-      : routeAgentRequest(request);
-    if (requestedAgent && requestedAgent !== currentChat) {
-      activateChatTask(requestedAgent);
-      activeChatRef.current = requestedAgent;
-      setActiveSection("Home");
-      setActiveChat(requestedAgent);
-      setMessage(request);
-      return;
-    }
-    const responseChat = activeSection === "Today Briefing" && !activeChat ? routeBriefingRequest(request) : currentChat;
-    if (responseChat !== currentChat) { activeChatRef.current = responseChat; setActiveSection("Home"); setActiveChat(responseChat); }
     startChatTask(responseChat);
     if (responseChat === "Game Q&A") recordGameQnaWork(request, "진행 중");
     setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }]);
-    persistMessage("user", request);
+    persistMessage("user", request, undefined, responseChat);
     if (getTaskAction(request) === "confirm") {
       const proposal = createTaskProposal(request, `proposal-${Date.now()}`);
       if (!proposal) return;
       const question = "이 내용을 Project Task로 추가할까요? 아래 내용을 확인해 주세요.";
       setChat((items) => [...items, { id: `question-${Date.now()}`, kind: "text", text: question }, { id: proposal.id, kind: "proposal", proposal, state: "pending" }]);
-      persistMessage("assistant", question);
+      persistMessage("assistant", question, undefined, responseChat);
       return;
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(currentChat)}/reply`, {
+      const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(responseChat)}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: request, owner: assigneeName }),
@@ -530,7 +473,7 @@ export default function App() {
       const normalizedPendingAction: PendingAction | null = data.pending_action?.skill_id
         ? { skill_id: data.pending_action.skill_id, arguments: data.pending_action.arguments ?? {} }
         : null;
-      persistMessage("assistant", reply, normalizedPendingAction);
+      persistMessage("assistant", reply, normalizedPendingAction, responseChat);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       const textMessage: ChatMessage = { id: `response-${Date.now()}`, kind: "text", text: reply };
       const pendingActionMessage: ChatMessage | null = normalizedPendingAction
@@ -548,7 +491,7 @@ export default function App() {
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown agent error";
       const reply = `Main Agent 오류: ${detail}`;
-      persistMessage("assistant", reply);
+      persistMessage("assistant", reply, undefined, responseChat);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       setChat((items) => [...items, { id: `error-${Date.now()}`, kind: "text", text: reply }]);
       if (responseChat === "Game Q&A") recordGameQnaWork(request, "오류");

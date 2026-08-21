@@ -277,7 +277,7 @@ async def route_main_chat_request(content: str) -> dict[str, str | bool]:
         "targetAgent": card_name,
         "targetChat": target_chat,
         "originalRequest": content,
-        "handoff": True,
+        "handoff": "confirmation_required" if card_name == "video-agent" else "automatic",
     }
 
 
