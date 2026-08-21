@@ -47,4 +47,42 @@ describe("MainBriefingChatbot", () => {
     await waitFor(() => expect(screen.queryByText("영상 관련 질문")).not.toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/chats/Main%20Chatbot/reset"), expect.objectContaining({ method: "POST" }));
   });
+
+  it("uses the Main routing API and dispatches an automatic handoff without generating a Main answer", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/api/main-route")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            targetAgent: "workmate-agent",
+            targetChat: "Workmate AI",
+            originalRequest: "오늘 브리핑 해줘",
+            handoff: "automatic",
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ messages: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const routeListener = vi.fn();
+    window.addEventListener("main-chat-route", routeListener);
+    render(<MainBriefingChatbot />);
+
+    const input = screen.getByPlaceholderText("무엇을 도와드릴까요?");
+    await userEvent.type(input, "오늘 브리핑 해줘");
+    await userEvent.click(screen.getByRole("button", { name: "➤" }));
+
+    await waitFor(() => expect(routeListener).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/main-route",
+      expect.objectContaining({ body: JSON.stringify({ content: "오늘 브리핑 해줘" }) }),
+    );
+    expect((routeListener.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      chat: "Workmate AI",
+      message: "오늘 브리핑 해줘",
+      handoff: "automatic",
+    });
+    expect(screen.getByText("Workmate AI로 연결합니다.")).toBeInTheDocument();
+    window.removeEventListener("main-chat-route", routeListener);
+  });
 });
