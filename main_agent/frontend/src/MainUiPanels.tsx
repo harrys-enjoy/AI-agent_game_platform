@@ -92,6 +92,7 @@ export function MainBriefingChatbot({ contextHint, owner = window.localStorage.g
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  const composerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,10 +165,22 @@ export function MainBriefingChatbot({ contextHint, owner = window.localStorage.g
       </div>
       <form className="briefing-chat-composer" onSubmit={submit}>
         <input
+          ref={composerInputRef}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder={contextHint ? "Type a message..." : "무엇을 도와드릴까요?"}
         />
+        {message && (
+          <button
+            type="button"
+            className="clear-message"
+            aria-label="입력 지우기"
+            title="입력 지우기"
+            onClick={() => { setMessage(""); composerInputRef.current?.focus(); }}
+          >
+            ✕
+          </button>
+        )}
         <button type="submit">➤</button>
       </form>
     </section>
