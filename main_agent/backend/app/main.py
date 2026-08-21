@@ -77,6 +77,10 @@ class ChatReplyRequest(BaseModel):
     confirmed_arguments: dict[str, Any] | None = None
 
 
+class MainRouteRequest(BaseModel):
+    content: str
+
+
 class VideoPromptHandoffRequest(BaseModel):
     art_prompt: dict[str, Any]
 
@@ -126,6 +130,12 @@ CHAT_AGENT_NAMES = {
     "Development Assistant": "dev-agent",
     "Game Q&A": "game-qna-agent",
     "Cat AI Chat": "workmate-agent",
+}
+AGENT_CHAT_NAMES = {
+    "workmate-agent": "Workmate AI",
+    "video-agent": "Video Generation",
+    "dev-agent": "Development Assistant",
+    "game-qna-agent": "Game Q&A",
 }
 
 GAME_QNA_COMMANDS = {
@@ -234,6 +244,15 @@ def build_video_handoff_request(art_prompt: dict[str, Any]) -> dict:
 
 
 def resolve_chat_agent_fallback(agent_name: str, content: str) -> str:
+    if agent_name == "Main Chatbot":
+        text = content.lower()
+        if re.search(r"영상|비디오|동영상|렌더|편집|자막|video|render|edit|motion", text):
+            return "video-agent"
+        if re.search(r"개발|코드|버그|오류|api|배포|프론트|백엔드|development|code|bug|debug", text):
+            return "dev-agent"
+        if re.search(r"게임|스토리|캐릭터|퀘스트|세계관|q&a|game|story|character|quest", text):
+            return "game-qna-agent"
+        return "workmate-agent"
     if agent_name == "Workmate AI" and re.search(r"홍길동|전우치|세계관|스토리|lore|game|게임", content, re.IGNORECASE):
         return "game-qna-agent"
     return CHAT_AGENT_NAMES.get(agent_name, agent_name)
@@ -247,6 +266,19 @@ async def resolve_chat_agent(agent_name: str, content: str) -> str:
     if routed and routed["selected_agents"]:
         return routed["selected_agents"][0]
     return resolve_chat_agent_fallback(agent_name, content)
+
+
+async def route_main_chat_request(content: str) -> dict[str, str | bool]:
+    card_name = await resolve_chat_agent("Main Chatbot", content)
+    target_chat = AGENT_CHAT_NAMES.get(card_name)
+    if target_chat is None:
+        raise HTTPException(status_code=422, detail="담당 Agent를 판단하지 못했습니다.")
+    return {
+        "targetAgent": card_name,
+        "targetChat": target_chat,
+        "originalRequest": content,
+        "handoff": "confirmation_required" if card_name == "video-agent" else "automatic",
+    }
 
 
 def build_agent_request(agent_name: str, message: str, mode: str | None = None) -> dict:
@@ -324,7 +356,9 @@ def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str,
 async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="Message is required")
-    card_name = await resolve_chat_agent(agent_name, payload.content)
+    card_name = CHAT_AGENT_NAMES.get(agent_name)
+    if card_name is None:
+        card_name = await resolve_chat_agent(agent_name, payload.content)
     configured_card = next((card for card in cards if card.name == card_name), None)
     if configured_card is None:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -346,18 +380,6 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
         request["mode"] = command["mode"] if command else "lore"
     try:
         result = await client.send_message(card.url, request, headers=registry.headers(card_name))
-        review = await router.review(payload.content, card_name, result.get("answer") or result.get("summary") or "") if hasattr(router, "review") else None
-        replacement = review.get("replacement_agent") if review and not review["accepted"] else None
-        if replacement and replacement != card_name:
-            replacement_card = live_cards.get(replacement) if live_cards else next((item for item in cards if item.name == replacement), None)
-            if replacement_card:
-                card_name = replacement
-                card = replacement_card
-                command = parse_game_qna_command(payload.content) if card_name == "game-qna-agent" else None
-                request = build_agent_request(card_name, game_qna_agent_message(command) if command else payload.content)
-                if card_name == "game-qna-agent":
-                    request["mode"] = command["mode"] if command else "lore"
-                result = await client.send_message(card.url, request, headers=registry.headers(card_name))
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except Exception as exc:
@@ -433,6 +455,13 @@ async def route_request(payload: RouteRequest) -> dict:
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question is required")
     return await chat_reply("Cat AI Chat", ChatReplyRequest(content=payload.question))
+
+
+@app.post("/api/main-route")
+async def main_route(payload: MainRouteRequest) -> dict[str, str | bool]:
+    if not payload.content.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    return await route_main_chat_request(payload.content)
 
 
 def catalog_base_url() -> str:

@@ -7,7 +7,7 @@ import pytest
 
 
 CATALOG_DIR = r"C:\Users\희정\Downloads\Nvidia project\Catalog & Manual(Game project)"
-BACKEND_DIR = r"C:\Users\희정\Downloads\Nvidia project\Main Agent(docker)\backend"
+BACKEND_DIR = r"C:\Users\희정\Downloads\Nvidia project\Main Agent(docker)\main_agent\backend"
 
 
 async def wait_for(url: str, timeout: float = 8) -> None:
