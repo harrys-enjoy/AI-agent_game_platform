@@ -1,6 +1,14 @@
 import { useRef, useState, type FormEvent } from "react";
 import { composeStructuredBrief } from "./brief-compose";
 
+const INTEGER_PATTERN = /^\d*$/;
+const DECIMAL_PATTERN = /^\d*\.?\d*$/;
+
+function toFiniteNumber(value: string): number | undefined {
+  const parsed = Number(value);
+  return value !== "" && Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubmit: (message: string) => void }) {
   const [brief, setBrief] = useState("");
   const [durationSec, setDurationSec] = useState("");
@@ -16,10 +24,10 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
     if (brief.trim().length < 5) return;
     const message = composeStructuredBrief({
       brief,
-      durationSec: durationSec ? Number(durationSec) : undefined,
+      durationSec: toFiniteNumber(durationSec),
       preset: preset ? (preset as "이벤트" | "공개" | "커뮤니티") : undefined,
       sceneType: sceneType ? (sceneType as "인게임" | "스튜디오") : undefined,
-      maxBudgetUsd: maxBudgetUsd ? Number(maxBudgetUsd) : undefined,
+      maxBudgetUsd: toFiniteNumber(maxBudgetUsd),
     });
     onSubmit(message);
   }
@@ -52,7 +60,7 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         <input
           ref={durationRef}
           value={durationSec}
-          onChange={(event) => setDurationSec(event.target.value)}
+          onChange={(event) => { if (INTEGER_PATTERN.test(event.target.value)) setDurationSec(event.target.value); }}
           placeholder="길이(초)"
           aria-label="길이(초)"
           inputMode="numeric"
@@ -98,7 +106,7 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
         <input
           ref={budgetRef}
           value={maxBudgetUsd}
-          onChange={(event) => setMaxBudgetUsd(event.target.value)}
+          onChange={(event) => { if (DECIMAL_PATTERN.test(event.target.value)) setMaxBudgetUsd(event.target.value); }}
           placeholder="예산(달러)"
           aria-label="예산(달러)"
           inputMode="decimal"
