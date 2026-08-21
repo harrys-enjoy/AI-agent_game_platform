@@ -40,4 +40,36 @@ describe("FormComposer", () => {
     expect(screen.getByLabelText("예산(달러)")).toBeDisabled();
     expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
   });
+
+  it("blocks submit and warns when duration exceeds the 30s cap", async () => {
+    const onSubmit = vi.fn();
+    render(<FormComposer disabled={false} onSubmit={onSubmit} />);
+
+    await userEvent.type(screen.getByLabelText("브리프"), "할로윈 이벤트");
+    await userEvent.type(screen.getByLabelText("길이(초)"), "45");
+
+    expect(screen.getByTestId("duration-cap-warning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-digit keystrokes in the duration field", async () => {
+    render(<FormComposer disabled={false} onSubmit={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("길이(초)"), "ab15cd");
+    expect(screen.getByLabelText("길이(초)")).toHaveValue("15");
+  });
+
+  it("warns (without blocking submit) when budget exceeds the $10 cap", async () => {
+    const onSubmit = vi.fn();
+    render(<FormComposer disabled={false} onSubmit={onSubmit} />);
+
+    await userEvent.type(screen.getByLabelText("브리프"), "할로윈 이벤트");
+    await userEvent.type(screen.getByLabelText("예산(달러)"), "50");
+
+    expect(screen.getByTestId("budget-cap-warning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "생성 요청" })).toBeEnabled();
+  });
 });
