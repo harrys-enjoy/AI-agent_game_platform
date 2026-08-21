@@ -75,7 +75,7 @@ def test_video_handoff_formats_the_art_prompt_as_a_korean_brief():
 def test_video_generation_task_is_saved_to_the_operational_task_log(monkeypatch):
     from app import main
 
-    async def fake_send_message(registry, message):
+    async def fake_send_message(registry, message, user_id=None):
         return {"task": {"id": "video-log-test"}}
 
     monkeypatch.setattr(main.video_agent_client, "send_message", fake_send_message)

@@ -5,3 +5,6 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 media/
+
+# 로컬 SQLite Task 메타데이터 (a2a_server/task_repository.py) - media/와 같은 이유로 gitignore.
+.runtime/

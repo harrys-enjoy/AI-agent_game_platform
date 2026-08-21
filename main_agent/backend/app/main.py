@@ -582,7 +582,7 @@ async def resume_video_scene(task_id: str, scene_id: str, file: UploadFile = Fil
 @app.post("/api/video-agent/tasks")
 async def create_video_agent_task(payload: VideoAgentTaskRequest) -> dict:
     try:
-        result = await video_agent_client.send_message(registry, payload.message)
+        result = await video_agent_client.send_message(registry, payload.message, user_id=payload.owner)
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except (httpx.HTTPError, RuntimeError) as exc:
@@ -600,6 +600,26 @@ async def create_video_agent_task(payload: VideoAgentTaskRequest) -> dict:
     return result
 
 
+@app.get("/api/video-agent/tasks")
+async def list_video_agent_tasks(owner: str, limit: int = 20, offset: int = 0) -> dict:
+    try:
+        return await video_agent_client.list_tasks(registry, owner, limit=limit, offset=offset)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/video-agent/tasks/{task_id}/detail")
+async def get_video_agent_task_detail(task_id: str) -> dict:
+    try:
+        return await video_agent_client.get_task_detail(registry, task_id)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.get("/api/video-agent/tasks/{task_id}")
 async def get_video_agent_task(task_id: str) -> dict:
     try:
@@ -614,6 +634,26 @@ async def get_video_agent_task(task_id: str) -> dict:
 async def cancel_video_agent_task(task_id: str) -> dict:
     try:
         return await video_agent_client.cancel_task(registry, task_id)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.delete("/api/video-agent/tasks/{task_id}")
+async def delete_video_agent_task(task_id: str) -> dict:
+    try:
+        return await video_agent_client.delete_task(registry, task_id)
+    except A2AError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/video-agent/veo-usage")
+async def get_veo_usage() -> dict:
+    try:
+        return await video_agent_client.get_veo_usage(registry)
     except A2AError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict()["error"]) from exc
     except (httpx.HTTPError, RuntimeError) as exc:

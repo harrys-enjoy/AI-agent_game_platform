@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TaskState } from "./types";
 
-const LABELS: Record<TaskState, string> = {
+export const LABELS: Record<TaskState, string> = {
   TASK_STATE_SUBMITTED: "제출됨",
   TASK_STATE_WORKING: "생성 중",
   TASK_STATE_INPUT_REQUIRED: "수동 수정 필요",

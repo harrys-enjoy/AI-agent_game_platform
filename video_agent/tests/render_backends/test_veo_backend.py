@@ -382,3 +382,65 @@ def test_estimate_cost_matches_render_reported_cost(monkeypatch, tmp_path):
     result = backend.render(_candidate(image_path), motion_prompt="pan left", duration_sec=7.3)
 
     assert result.cost_usd == estimated
+
+
+# --- Usage tracking ---
+
+
+def test_render_records_usage_on_successful_call(monkeypatch, tmp_path):
+    monkeypatch.setenv("VEO_API_KEY", "env-key")
+    image_path = tmp_path / "candidate.png"
+    image_path.write_bytes(b"fake-image-bytes")
+
+    client = MagicMock()
+    client.models.generate_videos.return_value = _FakeOperation(done=False)
+    client.operations.get.return_value = _done_operation()
+    usage_repository = MagicMock()
+
+    backend = VeoBackend(
+        tier="veo-3.1-fast", client=client, output_dir=tmp_path / "media", poll_interval_sec=0,
+        usage_repository=usage_repository,
+    )
+    backend.render(_candidate(image_path), motion_prompt="pan left", duration_sec=6.0)
+
+    usage_repository.record_call.assert_called_once()
+
+
+def test_render_does_not_record_usage_when_generate_videos_call_rejected(monkeypatch, tmp_path):
+    """A 429 (or any other) rejection from generate_videos() itself means
+    Google never accepted the request - must not count as quota used."""
+
+    monkeypatch.setenv("VEO_API_KEY", "env-key")
+    image_path = tmp_path / "candidate.png"
+    image_path.write_bytes(b"fake-image-bytes")
+
+    client = MagicMock()
+    client.models.generate_videos.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED")
+    usage_repository = MagicMock()
+
+    backend = VeoBackend(
+        tier="veo-3.1-fast", client=client, output_dir=tmp_path / "media", poll_interval_sec=0,
+        usage_repository=usage_repository,
+    )
+
+    with pytest.raises(VeoBackendError):
+        backend.render(_candidate(image_path), motion_prompt="pan left", duration_sec=6.0)
+
+    usage_repository.record_call.assert_not_called()
+
+
+def test_render_works_without_usage_repository(monkeypatch, tmp_path):
+    """usage_repository defaults to None (e.g. every other test in this file) -
+    render() must not crash trying to call .record_call() on None."""
+
+    monkeypatch.setenv("VEO_API_KEY", "env-key")
+    image_path = tmp_path / "candidate.png"
+    image_path.write_bytes(b"fake-image-bytes")
+
+    client = MagicMock()
+    client.models.generate_videos.return_value = _FakeOperation(done=False)
+    client.operations.get.return_value = _done_operation()
+
+    backend = VeoBackend(tier="veo-3.1-fast", client=client, output_dir=tmp_path / "media", poll_interval_sec=0)
+
+    backend.render(_candidate(image_path), motion_prompt="pan left", duration_sec=6.0)
