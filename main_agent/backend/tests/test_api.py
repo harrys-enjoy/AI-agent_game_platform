@@ -182,14 +182,27 @@ def test_codexbook_chat_reply_exposes_codex_routing():
     assert response.json()["answer"].startswith("[Source: Codex (characters / monsters / items)]")
 
 
-def test_main_chat_routes_lore_question_to_game_qna_agent():
-    client = TestClient(app)
-    response = client.post("/api/chats/Workmate AI/reply", json={"content": "홍길동"})
+def test_main_route_returns_handoff_for_the_selected_agent(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            assert request == "사용자 요청:\n오늘 브리핑 해줘"
+            return {"selected_agents": ["workmate-agent"], "confidence": 0.97}
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post("/api/main-route", json={"content": "오늘 브리핑 해줘"})
+
     assert response.status_code == 200
-    assert response.json()["agent"] == "game-qna-agent"
+    assert response.json() == {
+        "targetAgent": "workmate-agent",
+        "targetChat": "Workmate AI",
+        "originalRequest": "오늘 브리핑 해줘",
+        "handoff": True,
+    }
 
 
-def test_all_chat_inputs_can_be_routed_by_router_llm(monkeypatch):
+def test_agent_chat_uses_its_explicit_agent_instead_of_rerouting(monkeypatch):
     from app import main
 
     class FakeRouter:
@@ -204,7 +217,7 @@ def test_all_chat_inputs_can_be_routed_by_router_llm(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["agent"] == "dev-agent"
+    assert response.json()["agent"] == "video-agent"
 
 
 def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
