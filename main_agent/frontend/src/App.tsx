@@ -433,8 +433,15 @@ export default function App() {
   function selectGameQaCommand(command: string) {
     const resolved = resolveChatCommand(command);
     if (resolved.kind !== "request") return;
-    setMessage(getCommandInputValue(resolved.command ?? command));
+    const value = getCommandInputValue(resolved.command ?? command);
+    setMessage(value);
     setShowCommandHelp(false);
+    window.setTimeout(() => {
+      const input = composerInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(value.length, value.length);
+    }, 0);
   }
 
   async function submit(event: FormEvent) {
