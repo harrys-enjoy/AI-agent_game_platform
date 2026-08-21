@@ -3,6 +3,8 @@ import { composeStructuredBrief } from "./brief-compose";
 
 const INTEGER_PATTERN = /^\d*$/;
 const DECIMAL_PATTERN = /^\d*\.?\d*$/;
+const MAX_DURATION_SEC = 30;
+const MAX_BUDGET_USD = 10;
 
 function toFiniteNumber(value: string): number | undefined {
   const parsed = Number(value);
@@ -18,10 +20,14 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
   const briefRef = useRef<HTMLTextAreaElement>(null);
   const durationRef = useRef<HTMLInputElement>(null);
   const budgetRef = useRef<HTMLInputElement>(null);
+  const durationValue = toFiniteNumber(durationSec);
+  const durationTooLong = durationValue !== undefined && durationValue > MAX_DURATION_SEC;
+  const budgetValue = toFiniteNumber(maxBudgetUsd);
+  const budgetOverCap = budgetValue !== undefined && budgetValue > MAX_BUDGET_USD;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (brief.trim().length < 5) return;
+    if (brief.trim().length < 5 || durationTooLong) return;
     const message = composeStructuredBrief({
       brief,
       durationSec: toFiniteNumber(durationSec),
@@ -79,6 +85,11 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
           </button>
         )}
       </div>
+      {durationTooLong && (
+        <p className="-mt-1 text-xs text-red-600" data-testid="duration-cap-warning">
+          영상 길이는 {MAX_DURATION_SEC}초를 넘을 수 없습니다.
+        </p>
+      )}
       <select
         value={preset}
         onChange={(event) => setPreset(event.target.value)}
@@ -125,9 +136,14 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
           </button>
         )}
       </div>
+      {budgetOverCap && (
+        <p className="-mt-1 text-xs text-amber-600" data-testid="budget-cap-warning">
+          예산은 최대 ${MAX_BUDGET_USD}까지만 지원되어 자동으로 ${MAX_BUDGET_USD}로 제한됩니다.
+        </p>
+      )}
       <button
         type="submit"
-        disabled={disabled || brief.trim().length < 5}
+        disabled={disabled || brief.trim().length < 5 || durationTooLong}
         className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white disabled:opacity-40"
       >
         생성 요청
