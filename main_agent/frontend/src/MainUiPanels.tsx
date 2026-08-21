@@ -397,7 +397,37 @@ function MeetingSearchDetailPanel({ assigneeName }: { assigneeName: string }) {
     void search.run(searchMeetingsInput(query.trim(), 5));
   }
 
-  return <article className="meeting-search-detail"><span className="feature-kicker">MEETING SEARCH</span><h1>이전 회의록 검색</h1><p>회의에서 결정된 내용을 근거와 함께 찾아드립니다.</p><form className="meeting-search-form" onSubmit={submit}><input aria-label="회의록 검색어" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="submit" disabled={search.loading}>{search.loading ? "검색 중..." : "검색"}</button></form>{search.error && <p style={{ color: "#bd655b", marginTop: 16 }}>{search.error}</p>}{search.data && <section className="meeting-answer"><div className="answer-mark">W</div><div><span className="feature-kicker">WORKMATE ANSWER</span><h2>{search.data.answer}</h2>{search.data.insufficient_evidence && <p style={{ color: "#bd655b" }}>근거가 충분하지 않습니다 — 참고용으로만 사용하세요.</p>}{search.data.sources.map((source) => <blockquote key={source.meeting_chunk_id}><strong>{source.meeting_title}</strong><span>{source.meeting_date}{source.speaker ? ` · ${source.speaker}` : ""}</span><q>{source.quote}</q></blockquote>)}{!search.data.sources.length && <p>인용할 근거가 없습니다.</p>}</div></section>}</article>;
+  return <article className="meeting-search-detail">
+    <span className="feature-kicker">MEETING SEARCH</span>
+    <h1>이전 회의록 검색</h1>
+    <p>회의에서 결정된 내용을 근거와 함께 찾아드립니다.</p>
+    <form className="meeting-search-form" onSubmit={submit}>
+      <input aria-label="회의록 검색어" value={query} onChange={(event) => setQuery(event.target.value)} />
+      <button type="submit" disabled={search.loading}>{search.loading ? "검색 중..." : "검색"}</button>
+    </form>
+    {search.error && <p style={{ color: "#bd655b", marginTop: 16 }}>{search.error}</p>}
+    {search.data && <section className="meeting-answer">
+      <div className="answer-mark">W</div>
+      <div>
+        <span className="feature-kicker">WORKMATE ANSWER</span>
+        <p className="answer-summary">{search.data.answer.split(/\r?\n/, 1)[0]}</p>
+        {search.data.insufficient_evidence && <p className="answer-warning">근거가 충분하지 않습니다 — 참고용으로만 사용하세요.</p>}
+        {!!search.data.sources.length && <>
+          <div className="answer-source-heading"><strong>회의 근거</strong><span>{search.data.sources.length}건</span></div>
+          <ol className="meeting-source-list">
+            {search.data.sources.map((source, index) => <li key={source.meeting_chunk_id}>
+              <div className="source-number">{index + 1}</div>
+              <div>
+                <div className="source-title"><strong>{source.meeting_title}</strong><span>{source.meeting_date}{source.speaker ? ` · ${source.speaker}` : ""}</span></div>
+                <q>{source.quote}</q>
+              </div>
+            </li>)}
+          </ol>
+        </>}
+        {!search.data.sources.length && <p>인용할 근거가 없습니다.</p>}
+      </div>
+    </section>}
+  </article>;
 }
 
 function MeetingsDetailPanel({ assigneeName }: { assigneeName: string }) {
@@ -412,8 +442,8 @@ function MeetingsDetailPanel({ assigneeName }: { assigneeName: string }) {
   const [error, setError] = useState<string | null>(null);
   const [openMeetingId, setOpenMeetingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       setMeetings(await meetingsApi.list(config));
@@ -430,6 +460,12 @@ function MeetingsDetailPanel({ assigneeName }: { assigneeName: string }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    // 분석 완료 후 목록의 `has_analysis`도 별도 새로고침 없이 반영한다.
+    const timer = window.setInterval(() => void load(true), 5000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
   async function removeMeeting(meeting: Meeting) {
     if (!window.confirm(`"${meeting.title}" 회의를 삭제할까요?`)) return;
     try {
@@ -440,7 +476,7 @@ function MeetingsDetailPanel({ assigneeName }: { assigneeName: string }) {
     }
   }
 
-  return <article className="meetings-detail"><div className="meetings-heading"><div><span className="feature-kicker">MEETINGS</span><h1>회의 관리</h1><p>녹음, 회의록, 분석 결과를 회의별로 확인합니다.</p></div><button type="button" onClick={load}>↻ 새로고침</button></div>
+  return <article className="meetings-detail"><div className="meetings-heading"><div><span className="feature-kicker">MEETINGS</span><h1>회의 관리</h1><p>녹음, 회의록, 분석 결과를 회의별로 확인합니다.</p></div><button type="button" onClick={() => void load()}>↻ 새로고침</button></div>
     {error && <p style={{ color: "#bd655b" }}>{error}</p>}
     {loading && <p style={{ color: "#75867f" }}>불러오는 중...</p>}
     {!loading && <div className="meeting-list">
@@ -471,13 +507,24 @@ function MeetingDetailSection({ meeting, assigneeName, onFreshAnalysis }: Meetin
 
   useEffect(() => {
     let cancelled = false;
-    fetchAnalysis()
-      .then((result) => { if (!cancelled) setExisting(result); })
-      .catch(() => {
-        // 아직 분석한 적 없는 회의는 404 — 무시하고 "분석 실행" 버튼을 보여준다.
-      });
-    return () => { cancelled = true; };
-  }, [fetchAnalysis]);
+    let timer: number | undefined;
+    const loadExisting = async () => {
+      try {
+        const result = await fetchAnalysis();
+        if (!cancelled) {
+          setExisting(result);
+          if (timer !== undefined) window.clearInterval(timer);
+        }
+      } catch {
+        // 분석 결과가 저장되는 시점이 Task 완료와 다를 수 있어 재시도한다.
+      }
+    };
+    void loadExisting();
+    if (meeting.has_analysis) timer = window.setInterval(() => void loadExisting(), 2000);
+    return () => { cancelled = true; if (timer !== undefined) window.clearInterval(timer); };
+    // meeting.has_analysis가 false→true로 바뀌는 순간(목록 폴링으로 갱신됨) 다시 실행해
+    // 폴링을 시작해야 한다. 그렇지 않으면 상세 패널이 "불러오는 중"에 멈춰 있게 된다.
+  }, [fetchAnalysis, meeting.has_analysis]);
 
   const data = analysis.data ?? existing;
   const items: ActionItem[] = (data?.action_items ?? []).map((item) => ({ ...item, ...overrides[item.action_item_id] }));
@@ -522,7 +569,8 @@ function MeetingDetailSection({ meeting, assigneeName, onFreshAnalysis }: Meetin
 
   return <div style={{ borderTop: "1px solid #e6ece7", marginTop: 8, paddingTop: 12 }}>
     <TranscriptSection meetingId={meeting.meeting_id} assigneeName={assigneeName} />
-    {!data && <button type="button" disabled={analysis.loading} onClick={() => void runAnalysis()}>{analysis.loading ? "분석 중... (완료될 때까지 상태를 확인합니다)" : "회의 분석 실행 (analyze_meeting)"}</button>}
+    {!data && meeting.has_analysis && <p style={{ color: "#75867f" }}>분석 결과를 불러오는 중...</p>}
+    {!data && !meeting.has_analysis && <button type="button" disabled={analysis.loading} onClick={() => void runAnalysis()}>{analysis.loading ? "분석 중... (완료될 때까지 상태를 확인합니다)" : "회의 분석 실행 (analyze_meeting)"}</button>}
     {analysis.error && <p style={{ color: "#bd655b" }}>{analysis.error}</p>}
     {data && <>
       <h3 style={{ marginTop: 0 }}>요약</h3>

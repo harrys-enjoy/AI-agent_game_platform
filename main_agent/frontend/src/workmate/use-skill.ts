@@ -45,7 +45,22 @@ export function useSkillRunner<T>(skillId: string, assignee: string) {
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
-const TERMINAL_FAILURE_STATES = new Set(["TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_REJECTED"]);
+// SDK/어댑터마다 Task 상태의 표기가 다를 수 있으므로 내부에서 하나의 상태로 정규화한다.
+const COMPLETED_STATES = new Set(["TASK_STATE_COMPLETED", "completed", "succeeded", "success"]);
+const TERMINAL_FAILURE_STATES = new Set([
+  "TASK_STATE_FAILED",
+  "TASK_STATE_CANCELED",
+  "TASK_STATE_CANCELLED",
+  "TASK_STATE_REJECTED",
+  "failed",
+  "canceled",
+  "cancelled",
+  "rejected",
+]);
+
+export function normalizeTaskState(state: unknown): string {
+  return typeof state === "string" ? state.trim().toLowerCase() : "";
+}
 
 /**
  * `analyze_meeting`처럼 `state: "submitted"`로 즉시 응답하고 실제 결과는
@@ -70,15 +85,25 @@ export function usePollingSkillRunner<T>(skillId: string, assignee: string, fetc
         const submitted = await skillChatApi.send(config, skillId, input);
         const startedAt = Date.now();
         while (!cancelledRef.current) {
+          // 분석 결과 저장과 Task 상태 갱신 사이에 지연이 생길 수 있다.
+          // 결과 조회가 성공하면 Task 상태가 오래된 경우에도 즉시 완료 처리한다.
+          try {
+            const persistedData = await fetchResult();
+            if (!cancelledRef.current) setState({ loading: false, error: null, data: persistedData, warnings: [] });
+            return persistedData;
+          } catch {
+            // 아직 저장되지 않은 동안에는 Task Snapshot을 계속 확인한다.
+          }
           const task = await skillChatApi.getTask(config, submitted.task_id);
           const taskState = task.status.state;
-          if (taskState === "TASK_STATE_COMPLETED") {
+          const normalizedState = normalizeTaskState(taskState);
+          if (COMPLETED_STATES.has(taskState) || COMPLETED_STATES.has(normalizedState) || normalizedState === "task_state_completed") {
             const warnings = task.artifacts?.[0]?.metadata?.warnings ?? [];
             const data = await fetchResult();
             if (!cancelledRef.current) setState({ loading: false, error: null, data, warnings });
             return data;
           }
-          if (TERMINAL_FAILURE_STATES.has(taskState)) {
+          if (TERMINAL_FAILURE_STATES.has(taskState) || TERMINAL_FAILURE_STATES.has(normalizedState) || normalizedState.startsWith("task_state_failed")) {
             const message = task.status.message?.parts?.[0]?.text ?? `${skillId} 실행이 실패했습니다.`;
             if (!cancelledRef.current) setState({ loading: false, error: message, data: null, warnings: [] });
             return null;

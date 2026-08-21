@@ -47,6 +47,11 @@ test("never auto-adds a normal chat message to Project Task", () => {
 
 test("asks for confirmation before adding an explicit task request", () => {
   assert.equal(getTaskAction("영상 생성 작업을 Task에 추가해줘"), "confirm");
+  assert.equal(getTaskAction("오늘 일정을 Task에 추가해줘"), "confirm");
+});
+
+test("routes a schedule summary request to chat instead of task creation", () => {
+  assert.equal(getTaskAction("오늘 일정 정리해줘"), "chat");
 });
 
 test("returns a visible reply for a normal chat message", () => {
