@@ -39,7 +39,7 @@ describe("ChatComposer", () => {
     render(<ChatComposer disabled={false} onSubmit={vi.fn()} />);
     expect(
       screen.getByPlaceholderText(
-        "무엇을 홍보할지 구체적으로 적어주세요 (캐릭터/이벤트/게임 장면 등, 30초 이하, 예산 $10 이하). 예: 할로윈 신규 캐릭터 '루멘' 공개 이벤트, 15초로",
+        "무엇을 홍보할지 구체적으로 적어주세요 (캐릭터/이벤트/게임 장면 등, 16~30초, 예산 $10 이하). 예: 할로윈 신규 캐릭터 '루멘' 공개 이벤트, 20초로",
       ),
     ).toBeInTheDocument();
   });
