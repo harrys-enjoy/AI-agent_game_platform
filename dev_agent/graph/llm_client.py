@@ -2,13 +2,17 @@
 
 OpenAI 호환 API다. base_url(ELICE_API_URL)에 /v1/chat/completions를 붙이고
 model 필드를 명시해야 한다. langchain/openai SDK 없이 requests로 직접 POST한다.
+
+ELICE_API_URL이 이미 /v1로 끝나는 값으로 설정돼 있어도(둘 다 흔한 관례) /v1/v1/...로
+겹치지 않도록 끝의 /v1를 미리 벗겨낸다 — 실제로 .env에 /v1 포함 값이 들어있어 모든
+요청이 404로 죽은 적이 있다(2026-08-21).
 """
 import os
 import time
 
 import requests
 
-ELICE_API_URL = os.getenv("ELICE_API_URL", "https://mlapi.run/e9a5f41b-fdda-44f2-9545-ed88c458da53")
+ELICE_API_URL = os.getenv("ELICE_API_URL", "https://mlapi.run/e9a5f41b-fdda-44f2-9545-ed88c458da53").rstrip("/").removesuffix("/v1")
 ELICE_API_KEY = os.getenv("ELICE_API_KEY", "")
 ELICE_MODEL = os.getenv("ELICE_MODEL", "claude-sonnet-5")
 

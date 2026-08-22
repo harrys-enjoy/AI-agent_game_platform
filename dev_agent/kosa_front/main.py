@@ -97,10 +97,10 @@ async def fetch_github_branches_prs(owner: str, repo: str) -> Dict[str, Any]:
 
             # 3. Fetch Recent Commits per branch, so each commit is tagged with its
             # real branch. The plain /commits endpoint has no branch field at all.
-            # ponytail: capped to the first N branches to stay within GitHub's
-            # anonymous rate limit (60 req/hr); raise BRANCH_COMMIT_FETCH_LIMIT
-            # (or add a GITHUB_TOKEN) if more branch coverage is needed.
-            BRANCH_COMMIT_FETCH_LIMIT = 6
+            # ponytail: only capped when unauthenticated, to stay within GitHub's
+            # anonymous rate limit (60 req/hr) — a GITHUB_TOKEN gets 5000 req/hr,
+            # plenty to cover every branch.
+            BRANCH_COMMIT_FETCH_LIMIT = len(branches_data) if config.github_token else 6
             branch_names = [b.get("name") for b in branches_data[:BRANCH_COMMIT_FETCH_LIMIT] if b.get("name")]
             branch_commit_resps = await asyncio.gather(*[
                 client.get(
@@ -197,6 +197,7 @@ async def fetch_github_branches_prs(owner: str, repo: str) -> Dict[str, Any]:
             # is the only endpoint that gives it.
             branch_forks = []
             other_branches = [n for n in branch_names if n != default_branch]
+            branch_tip_sha = {b.get("name"): b.get("commit", {}).get("sha", "") for b in branches_data}
             if other_branches:
                 compare_resps = await asyncio.gather(*[
                     client.get(
@@ -215,14 +216,21 @@ async def fetch_github_branches_prs(owner: str, repo: str) -> Dict[str, Any]:
                     if not sha:
                         continue
                     base_date = base_commit.get("commit", {}).get("author", {}).get("date", "")
+                    # A branch with zero commits ahead (merge-base == its own tip) is fully
+                    # merged — keep its tip tagged with its own name instead of folding it
+                    # into default_branch, so it still gets a lane in the graph even though
+                    # every commit it has is shared history.
+                    is_fully_merged = sha == branch_tip_sha.get(branch_name)
                     if sha in seen_shas:
-                        # Step 3's per-branch fetch already pulled this commit in, mislabeled
-                        # as the child branch — it's actually shared history, so it belongs
-                        # on the base branch's lane. Now that /compare confirms it's the
-                        # merge-base, fix the tag.
+                        # Step 3's per-branch fetch already pulled this commit in, possibly
+                        # mislabeled — e.g. tagged as whichever branch happened to reach it
+                        # first (which can even be default_branch itself, if this commit sits
+                        # directly on its mainline). Now that /compare confirms what it really
+                        # is, fix the tag: the branch's own name if it's that branch's tip,
+                        # otherwise shared history that belongs on the base branch's lane.
                         for existing in git_tree_nodes:
                             if existing["full_sha"] == sha:
-                                existing["branch"] = default_branch
+                                existing["branch"] = branch_name if is_fully_merged else default_branch
                                 break
                     else:
                         seen_shas.add(sha)
@@ -235,17 +243,18 @@ async def fetch_github_branches_prs(owner: str, repo: str) -> Dict[str, Any]:
                             "author": author_info.get("login") or commit_info.get("author", {}).get("name", "Developer"),
                             "date": commit_info.get("author", {}).get("date", ""),
                             "parents": [p.get("sha", "")[:7] for p in base_commit.get("parents", [])],
-                            "branch": default_branch
+                            "branch": branch_name if is_fully_merged else default_branch
                         })
                     branch_forks.append({"branch": branch_name, "base": default_branch, "fork_sha": sha[:7]})
 
-                    # Any already-fetched child-branch commit at or before the merge-base's
+                    # Any already-fetched child-branch commit strictly before the merge-base's
                     # timestamp is itself pre-fork shared history (an ancestor of the merge
                     # base), not something unique to the child branch — retag those too.
-                    # Heuristic: no full parent-chain walk, just commit dates.
+                    # Heuristic: no full parent-chain walk, just commit dates. Strictly-before
+                    # (not <=) so the tip itself (date == base_date) is never caught here.
                     if base_date:
                         for existing in git_tree_nodes:
-                            if existing["branch"] == branch_name and existing["date"] and existing["date"] <= base_date:
+                            if existing["branch"] == branch_name and existing["date"] and existing["date"] < base_date:
                                 existing["branch"] = default_branch
 
             git_tree_nodes.sort(key=lambda n: n["date"], reverse=True)

@@ -157,14 +157,18 @@ services:
 
   # Standalone GitHub dashboard (no API coupling with dev-agent) - iframed into
   # the Development Assistant tab's Workspace Preview. Remapped to host 8004
-  # since main-agent already owns host 8000. Docker socket is intentionally
-  # NOT mounted here (it grants effective host-root) - the dashboard's
-  # deployment-status tab needs it, opt in later if that tab matters; see
-  # dev_agent/docker-compose.yml's kosa-front service for the full version.
+  # since main-agent already owns host 8000.
   kosa-front:
     build: ../dev_agent/kosa_front
     ports:
       - "8004:8000"
+    # Deployment-status tab shells out to the `docker` CLI to inspect the host's
+    # kosa-deploy-* containers - needs the host socket. This grants the container
+    # effective host-root, same tradeoff dev_agent/docker-compose.yml's standalone
+    # kosa-front service already makes; only keep this while kosa-front's image is
+    # built from this repo's own trusted source.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
 
