@@ -47,6 +47,22 @@ _EMAIL_SEARCH_WINDOW_DAYS = 30
 _EMAIL_SEARCH_WINDOW_NOTE = f"최근 {_EMAIL_SEARCH_WINDOW_DAYS}일 내 메일만 검색했습니다."
 
 
+def _relaxed_gmail_query(sanitized_query: str) -> str | None:
+    """AND 검색이 0건일 때 완화해서 재시도할 쿼리를 만든다.
+
+    Gmail 검색은 공백으로 나뉜 단어를 전부 AND로 요구하는데, 한국어는
+    형태소 분석을 안 해줘서 "로직변경사항"처럼 붙여 쓴 복합명사가 실제
+    메일의 "로직 변경"(띄어 쓴 별개 토큰)과 문자열이 달라 매칭되지 않는다
+    (2026-08-21, 실사용 중 발견 — Router가 사용자 문장의 복합명사를 그대로
+    옮겨 담으면 메일이 실제로 있어도 못 찾았다). 단어 하나만 있으면 OR로
+    묶어도 AND와 결과가 같으므로 재시도할 이유가 없다."""
+
+    terms = sanitized_query.split()
+    if len(terms) < 2:
+        return None
+    return "(" + " OR ".join(terms) + ")"
+
+
 def _sanitize_gmail_query_text(text: str) -> str:
     """자유 문장을 Gmail 검색 연산자로 잘못 해석되지 않게 다듬는다.
 
@@ -137,8 +153,16 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         session = build_authorized_session(token_path, _GMAIL_READ_SCOPES)
         adapter = GmailAdapter(session)
         if searched_by_query:
-            gmail_query = f"{_sanitize_gmail_query_text(str(query))} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
+            sanitized_query = _sanitize_gmail_query_text(str(query))
+            gmail_query = f"{sanitized_query} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
             candidates = await asyncio.to_thread(adapter.list_messages, query=gmail_query, max_results=5)
+            if not candidates:
+                # 엄격한 AND 검색이 0건이면, 붙여 쓴 복합명사 때문일 수 있으니
+                # 단어 단위 OR로 완화해 한 번 더 시도한다.
+                relaxed = _relaxed_gmail_query(sanitized_query)
+                if relaxed:
+                    relaxed_query = f"{relaxed} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
+                    candidates = await asyncio.to_thread(adapter.list_messages, query=relaxed_query, max_results=5)
             if not candidates:
                 return _unavailable(f"'{query}'와(과) 관련된 메일을 찾지 못했습니다.", searched_by_query=True)
             message_id = candidates[0].message_id
