@@ -5,13 +5,16 @@
 # runtime artifacts
 **/*.db
 **/*.sqlite*
+**/*.log
 
 # dependencies / build output
 **/node_modules/
 **/.venv/
+**/.venv_test/
 **/__pycache__/
 **/.pytest_cache/
 **/dist/
 **/build/
 **/.vite/
 **/*.tsbuildinfo
+**/*.egg-info/
