@@ -68,6 +68,7 @@ class ChatMessageRequest(BaseModel):
 class ChatReplyRequest(BaseModel):
     content: str
     owner: str = "미지정"
+    selected_agent: str | None = None
     # workmate-agent(`assistant_ask`)가 확인이 필요한 동작(예: `analyze_meeting`)을
     # 골랐을 때 `pending_action`으로 돌려준 skill_id/arguments를 그대로 되실어 보내면
     # `assistant_router.py::assistant_ask_workflow()`가 route()를 다시 안 묻고 그
@@ -258,6 +259,44 @@ def resolve_chat_agent_fallback(agent_name: str, content: str) -> str:
     return CHAT_AGENT_NAMES.get(agent_name, agent_name)
 
 
+def resolve_internal_chat_fallback(content: str) -> str | None:
+    text = content.lower()
+    if re.search(r"영상|비디오|동영상|렌더|편집|자막|video|render|edit|motion", text):
+        return "video-agent"
+    if re.search(r"개발|코드|버그|오류|api|배포|프론트|백엔드|development|code|bug|debug", text):
+        return "dev-agent"
+    if re.search(r"게임|스토리|캐릭터|퀘스트|세계관|홍길동|전우치|q&a|game|story|character|quest", text):
+        return "game-qna-agent"
+    if re.search(r"스케줄|일정|회의|오늘 할 일|우선순위|업무|보고서|캘린더|calendar|meeting", text):
+        return "workmate-agent"
+    return None
+
+
+async def resolve_internal_chat_route(content: str, selected_agent: str | None = None) -> dict[str, Any]:
+    lowered = content.lower()
+    meeting_intent = any(term in lowered for term in ("회의", "회의록", "음성파일", "녹음"))
+    analysis_intent = any(term in lowered for term in ("분석", "요약", "내용"))
+    if meeting_intent and analysis_intent:
+        return {"agent": "workmate-agent", "needs_selection": False}
+    if selected_agent is not None:
+        if selected_agent not in AGENT_CHAT_NAMES:
+            raise HTTPException(status_code=422, detail="Unknown selected agent")
+        return {"agent": selected_agent, "needs_selection": False}
+
+    command = parse_game_qna_command(content)
+    if content.strip().startswith("/") and command["kind"] in {"help", "request"}:
+        return {"agent": "game-qna-agent", "needs_selection": False}
+
+    routed = await router.select(f"사용자 요청:\n{content}")
+    if routed and len(routed["selected_agents"]) == 1:
+        return {"agent": routed["selected_agents"][0], "needs_selection": False}
+
+    fallback = resolve_internal_chat_fallback(content)
+    if fallback:
+        return {"agent": fallback, "needs_selection": False}
+    return {"agent": None, "needs_selection": True}
+
+
 async def resolve_chat_agent(agent_name: str, content: str) -> str:
     command = parse_game_qna_command(content)
     if command["kind"] in {"help", "request"} and content.strip().startswith("/"):
@@ -352,13 +391,28 @@ def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str,
     )
 
 
+@app.post("/api/chats/{agent_name}/route")
+async def route_agent_chat(agent_name: str, payload: ChatReplyRequest) -> dict[str, Any]:
+    if not payload.content.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    route = await resolve_internal_chat_route(payload.content, payload.selected_agent)
+    if route["needs_selection"]:
+        return {"status": "needs_agent_selection", "agent_options": list(AGENT_CHAT_NAMES.values())}
+    card_name = str(route["agent"])
+    return {"status": "routed", "target_agent": card_name, "target_chat": AGENT_CHAT_NAMES[card_name]}
+
+
 @app.post("/api/chats/{agent_name}/reply")
 async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="Message is required")
-    card_name = CHAT_AGENT_NAMES.get(agent_name)
-    if card_name is None:
-        card_name = await resolve_chat_agent(agent_name, payload.content)
+    route = await resolve_internal_chat_route(payload.content, payload.selected_agent)
+    if route["needs_selection"]:
+        return {
+            "status": "needs_agent_selection",
+            "agent_options": list(AGENT_CHAT_NAMES.values()),
+        }
+    card_name = str(route["agent"])
     configured_card = next((card for card in cards if card.name == card_name), None)
     if configured_card is None:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -400,6 +454,7 @@ async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     response_body = {
         "answer": answer,
         "agent": card_name,
+        "target_chat": AGENT_CHAT_NAMES[card_name],
         "mode": effective_mode,
         "command": command.get("command") if command and command["kind"] == "request" else None,
         "status": result.get("status", "succeeded"),

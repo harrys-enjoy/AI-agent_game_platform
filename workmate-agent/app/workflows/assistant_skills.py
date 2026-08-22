@@ -47,6 +47,22 @@ _EMAIL_SEARCH_WINDOW_DAYS = 30
 _EMAIL_SEARCH_WINDOW_NOTE = f"최근 {_EMAIL_SEARCH_WINDOW_DAYS}일 내 메일만 검색했습니다."
 
 
+def _relaxed_gmail_query(sanitized_query: str) -> str | None:
+    """AND 검색이 0건일 때 완화해서 재시도할 쿼리를 만든다.
+
+    Gmail 검색은 공백으로 나뉜 단어를 전부 AND로 요구하는데, 한국어는
+    형태소 분석을 안 해줘서 "로직변경사항"처럼 붙여 쓴 복합명사가 실제
+    메일의 "로직 변경"(띄어 쓴 별개 토큰)과 문자열이 달라 매칭되지 않는다
+    (2026-08-21, 실사용 중 발견 — Router가 사용자 문장의 복합명사를 그대로
+    옮겨 담으면 메일이 실제로 있어도 못 찾았다). 단어 하나만 있으면 OR로
+    묶어도 AND와 결과가 같으므로 재시도할 이유가 없다."""
+
+    terms = sanitized_query.split()
+    if len(terms) < 2:
+        return None
+    return "(" + " OR ".join(terms) + ")"
+
+
 def _sanitize_gmail_query_text(text: str) -> str:
     """자유 문장을 Gmail 검색 연산자로 잘못 해석되지 않게 다듬는다.
 
@@ -86,7 +102,11 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
     """
 
     from app.providers.google import GmailAdapter, GoogleProviderError
-    from app.providers.google_auth import GoogleCredentialError, build_authorized_session
+    from app.providers.google_auth import (
+        GoogleCredentialError,
+        build_authorized_session,
+        build_authorized_session_for_user,
+    )
 
     message_id = request.payload.get("message_id")
     if message_id:
@@ -107,6 +127,29 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         secret = Path(os.getenv(_GMAIL_CLIENT_SECRET_FILE_ENV, str(_GMAIL_OAUTH_TEST_DIR / "client_secret.json")))
         token = Path(os.getenv(_GMAIL_TOKEN_FILE_ENV, str(_GMAIL_OAUTH_TEST_DIR / "token.json")))
         return secret, token
+
+    def _session() -> Any:
+        """개별 연결(`app/google_oauth_web.py`의 "Google 계정 연결")을 최우선으로
+        쓰고, 없으면 기존 공유 `token.json`으로 폴백한다.
+
+        `app/workflows/daily_briefing.py`의 `_session()`과 같은 순서다
+        (2026-08-19 결정) — 이 함수만 그 순서를 빼먹은 채 공유 파일만 보고
+        있어서, 개별 연결을 이미 마친 사람도 "메일 읽기"에서는 계속 공유
+        계정(`token.json`)을 봤다. 공유 파일이 아예 없거나(디렉터리로 잘못
+        생성된 경우 포함) 만료됐어도, 개별 연결만 돼 있으면 이 Skill이
+        정상 동작해야 한다.
+        """
+
+        if request.user_id:
+            try:
+                return build_authorized_session_for_user(request.user_id, _GMAIL_READ_SCOPES)
+            except GoogleCredentialError:
+                pass  # 개별 연결 없음 — 아래 공유 계정으로 폴백
+
+        _secret_path, token_path = _credential_paths()
+        if not token_path.exists():
+            raise GoogleCredentialError("Gmail 인증이 안 되어 있습니다.")
+        return build_authorized_session(token_path, _GMAIL_READ_SCOPES)
 
     def _unavailable(reason: str, *, searched_by_query: bool) -> WorkflowResult:
         data = {
@@ -129,16 +172,21 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         )
 
     searched_by_query = message_id is None
-    _secret_path, token_path = _credential_paths()
-    if not token_path.exists():
-        return _unavailable("Gmail 인증이 안 되어 있어 메일 내용을 다시 가져올 수 없습니다.", searched_by_query=searched_by_query)
 
     try:
-        session = build_authorized_session(token_path, _GMAIL_READ_SCOPES)
+        session = _session()
         adapter = GmailAdapter(session)
         if searched_by_query:
-            gmail_query = f"{_sanitize_gmail_query_text(str(query))} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
+            sanitized_query = _sanitize_gmail_query_text(str(query))
+            gmail_query = f"{sanitized_query} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
             candidates = await asyncio.to_thread(adapter.list_messages, query=gmail_query, max_results=5)
+            if not candidates:
+                # 엄격한 AND 검색이 0건이면, 붙여 쓴 복합명사 때문일 수 있으니
+                # 단어 단위 OR로 완화해 한 번 더 시도한다.
+                relaxed = _relaxed_gmail_query(sanitized_query)
+                if relaxed:
+                    relaxed_query = f"{relaxed} newer_than:{_EMAIL_SEARCH_WINDOW_DAYS}d"
+                    candidates = await asyncio.to_thread(adapter.list_messages, query=relaxed_query, max_results=5)
             if not candidates:
                 return _unavailable(f"'{query}'와(과) 관련된 메일을 찾지 못했습니다.", searched_by_query=True)
             message_id = candidates[0].message_id

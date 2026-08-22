@@ -320,13 +320,69 @@ class AssistantSkillsTests(unittest.TestCase):
             handle.write("{}")
         with unittest.mock.patch.dict(os.environ, {"GOOGLE_TOKEN_FILE": token_path}), unittest.mock.patch(
             "app.providers.google_auth.build_authorized_session", return_value=object()
-        ), unittest.mock.patch("app.providers.google.GmailAdapter.list_messages", return_value=[]):
+        ), unittest.mock.patch(
+            "app.providers.google.GmailAdapter.list_messages", return_value=[]
+        ) as list_messages:
             result = asyncio.run(read_email_workflow(_request("read_email", {"query": "존재하지 않는 메일"})))
 
+        # 완화 재시도까지 포함해 두 번 검색하고도 못 찾으면 실패로 보고해야 한다.
+        self.assertEqual(list_messages.call_count, 2)
         self.assertFalse(result.data["data"]["available"])
         self.assertIn("존재하지 않는 메일", result.data["data"]["reason"])
         self.assertEqual(result.data["data"]["search_window_note"], "최근 30일 내 메일만 검색했습니다.")
         self.assertIn("최근 30일", result.text)
+
+    def test_read_email_relaxes_to_an_or_query_when_the_strict_and_search_finds_nothing(self) -> None:
+        """실사용 중 발견한 버그(2026-08-21)의 회귀 테스트 — Router가 뽑은 검색어에
+        "로직변경사항"처럼 붙여 쓴 복합명사가 섞이면, 실제 메일은 "로직 변경"처럼
+        띄어 쓰여 있어 엄격한 AND 검색이 0건을 반환했다. 단어 단위 OR로 완화해
+        재시도하면 찾아야 한다."""
+
+        token_path = os.path.join(self.temp_dir.name, "token.json")
+        with open(token_path, "w", encoding="utf-8") as handle:
+            handle.write("{}")
+        found = GmailMessage("msg-found", "thread-1", "짧은 미리보기", ())
+        message = GmailMessage("msg-found", "thread-1", "짧은 미리보기", (), "시즌 패스 보상 지급 로직 변경")
+        with unittest.mock.patch.dict(os.environ, {"GOOGLE_TOKEN_FILE": token_path}), unittest.mock.patch(
+            "app.providers.google_auth.build_authorized_session", return_value=object()
+        ), unittest.mock.patch(
+            "app.providers.google.GmailAdapter.list_messages", side_effect=[[], [found]]
+        ) as list_messages, unittest.mock.patch(
+            "app.providers.google.GmailAdapter.get_message_with_body",
+            return_value=(message, "본문: 시즌 패스 보상 지급 로직을 변경합니다."),
+        ):
+            result = asyncio.run(
+                read_email_workflow(_request("read_email", {"query": "시즌 패스 보상 지급 로직변경사항"}))
+            )
+
+        self.assertEqual(list_messages.call_count, 2)
+        list_messages.assert_has_calls(
+            [
+                unittest.mock.call(query="시즌 패스 보상 지급 로직변경사항 newer_than:30d", max_results=5),
+                unittest.mock.call(
+                    query="(시즌 OR 패스 OR 보상 OR 지급 OR 로직변경사항) newer_than:30d", max_results=5
+                ),
+            ]
+        )
+        self.assertTrue(result.data["data"]["available"])
+        self.assertEqual(result.data["data"]["message_id"], "msg-found")
+
+    def test_read_email_does_not_retry_when_the_query_is_a_single_word(self) -> None:
+        """단어가 하나뿐이면 OR로 묶어도 AND와 검색어가 동일해 재시도할 이유가
+        없다 — 불필요한 Gmail API 호출을 만들지 않는지 확인한다."""
+
+        token_path = os.path.join(self.temp_dir.name, "token.json")
+        with open(token_path, "w", encoding="utf-8") as handle:
+            handle.write("{}")
+        with unittest.mock.patch.dict(os.environ, {"GOOGLE_TOKEN_FILE": token_path}), unittest.mock.patch(
+            "app.providers.google_auth.build_authorized_session", return_value=object()
+        ), unittest.mock.patch(
+            "app.providers.google.GmailAdapter.list_messages", return_value=[]
+        ) as list_messages:
+            result = asyncio.run(read_email_workflow(_request("read_email", {"query": "존재하지않는메일"})))
+
+        self.assertEqual(list_messages.call_count, 1)
+        self.assertFalse(result.data["data"]["available"])
 
 
 if __name__ == "__main__":

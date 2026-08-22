@@ -96,6 +96,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupTheme() {
     document.documentElement.setAttribute('data-theme', state.theme);
     updateThemeIcon();
+    const parentOrigin = document.referrer ? new URL(document.referrer).origin : null;
+    if (window.parent !== window && parentOrigin) {
+      window.parent.postMessage({ type: 'dev-dashboard-theme', theme: state.theme }, parentOrigin);
+    }
   }
 
   function updateThemeIcon() {

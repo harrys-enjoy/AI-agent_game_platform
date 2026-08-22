@@ -30,7 +30,11 @@ describe("VideoAgentPage", () => {
     await waitFor(() => expect(screen.getByTestId("canvas-completed")).toHaveAttribute("src", "http://x/video.mp4"));
   });
 
-  it("shows the clarifying question inline instead of creating a task", async () => {
+  it("shows the Video Agent clarification inline after the request is routed to Video Generation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "routed", target_chat: "Video Generation" }),
+    }));
     vi.spyOn(api, "createVideoAgentTask").mockResolvedValue({ message: { parts: [{ text: "어떤 영상을 원하시나요?" }] } });
 
     render(<VideoAgentPage />);
