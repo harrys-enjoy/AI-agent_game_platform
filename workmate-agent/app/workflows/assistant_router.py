@@ -408,10 +408,18 @@ def _default_meetings_context(user_id: str, *, limit: int = _DEFAULT_CONTEXT_LIM
 
     from app.meeting_api import list_meetings
 
-    return [
-        {"meeting_id": item.meeting_id, "title": item.title, "has_analysis": item.has_analysis}
-        for item in list_meetings(user_id=user_id)[:limit]
-    ]
+    result: list[dict[str, Any]] = []
+    for item in list_meetings(user_id=user_id)[:limit]:
+        entry = {
+            "meeting_id": item.meeting_id,
+            "title": item.title,
+            "has_analysis": item.has_analysis,
+        }
+        created_at = getattr(item, "created_at", None)
+        if created_at:
+            entry["created_at"] = created_at.isoformat()
+        result.append(entry)
+    return result
 
 
 def _default_proposals_context(user_id: str, *, limit: int = _DEFAULT_CONTEXT_LIMIT) -> list[dict[str, Any]]:
@@ -598,6 +606,39 @@ def _today(timezone_name: str) -> str:
     from zoneinfo import ZoneInfo
 
     return datetime.now(ZoneInfo(timezone_name)).date().isoformat()
+
+
+def _select_today_pending_meeting_id(
+    text: str,
+    meetings: list[dict[str, Any]],
+    timezone_name: str,
+    *,
+    today: str | None = None,
+) -> str | None:
+    """오늘의 분석 대기 회의가 하나일 때만 자동 선택한다."""
+
+    lowered = text.lower()
+    meeting_intent = any(term in lowered for term in ("회의", "회의록", "음성파일", "녹음"))
+    analysis_intent = any(term in lowered for term in ("분석", "요약", "내용"))
+    if "오늘" not in lowered or not meeting_intent or not analysis_intent:
+        return None
+
+    target_date = today or _today(timezone_name)
+    candidates: list[dict[str, Any]] = []
+    for meeting in meetings:
+        if meeting.get("has_analysis") is not False or not meeting.get("created_at"):
+            continue
+        try:
+            from zoneinfo import ZoneInfo
+
+            created_date = datetime.fromisoformat(str(meeting["created_at"]).replace("Z", "+00:00"))
+            created_date = created_date.astimezone(ZoneInfo(timezone_name)).date().isoformat()
+        except (TypeError, ValueError, OSError):
+            created_date = str(meeting.get("created_at"))[:10]
+        if created_date == target_date:
+            candidates.append(meeting)
+
+    return candidates[0].get("meeting_id") if len(candidates) == 1 else None
 
 
 _MAX_HISTORY_TURNS = 10
@@ -797,7 +838,24 @@ async def assistant_ask_workflow(request_: WorkflowRequest) -> WorkflowResult:
         # 여기서만 기본 Context를 채운다 — 매 확인 재전송마다 회의·제안을 다시
         # 조회하는 낭비를 피한다.
         context = _with_default_context(context, request_.user_id)
-        routed = route(text, context=context, history=history, timezone_name=timezone_name)
+        auto_meeting_id = _select_today_pending_meeting_id(
+            text,
+            (context or {}).get("meetings") or [],
+            timezone_name,
+        )
+        if auto_meeting_id:
+            meeting = next(
+                item for item in (context or {}).get("meetings", [])
+                if item.get("meeting_id") == auto_meeting_id
+            )
+            routed = RoutedAction(
+                action="call_skill",
+                reply=f"오늘 업로드된 '{meeting.get('title')}' 회의를 분석할까요?",
+                skill_id="analyze_meeting",
+                arguments={"meeting_id": auto_meeting_id},
+            )
+        else:
+            routed = route(text, context=context, history=history, timezone_name=timezone_name)
         if routed.action == "reply" or routed.skill_id is None:
             reply = routed.reply or "죄송해요, 다시 한 번 말씀해 주시겠어요?"
             return WorkflowResult(

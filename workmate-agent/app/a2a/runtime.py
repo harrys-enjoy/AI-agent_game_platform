@@ -51,6 +51,7 @@ from app.workflows.assistant_skills import (
     review_proposal_workflow,
 )
 from app.workflows.assistant_router import assistant_ask_workflow
+from app.assignee_mapping import ASSIGNEE_TO_USER_ID
 
 
 A2A_VERSION = "1.0"
@@ -153,12 +154,7 @@ def build_agent_card() -> AgentCard:
 # import할 수 없어(순환/불필요한 의존 방지) 부득이 값만 중복해 둔다. "서선정"만 실제 Google
 # 연동 데이터가 있는 Workmate 계정이고(2026-08-18, `.runtime/tasks.sqlite3` 확인), 나머지
 # 3명은 자릿수·형식만 맞춘 placeholder라 매핑돼도 빈 결과만 나온다.
-ASSIGNEE_USER_IDS = {
-    "서선정": "10464531542706509691",
-    "배동우": "267494469329567778120",
-    "이승현": "568401699951365934381",
-    "변해훈": "898605867716224776814",
-}
+ASSIGNEE_USER_IDS = ASSIGNEE_TO_USER_ID
 
 
 class RuntimeBootstrapExecutor(AgentExecutor):

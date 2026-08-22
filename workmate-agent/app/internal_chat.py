@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.a2a.runtime import approved_skill_definitions, task_store, workflow_registry
 from app.workflows.registry import WorkflowRequest
+from app.assignee_mapping import ASSIGNEE_TO_USER_ID
 
 
 INTERNAL_CHAT_ENABLED_ENV = "WORKMATE_INTERNAL_CHAT_ENABLED"
@@ -41,15 +42,6 @@ SCHEMA_ROOT_ENV = "WORKMATE_SCHEMA_ROOT"
 # `dev_gmail_sync_api.py`, `dev_calendar_sync_api.py`, `google_oauth_web.py`)는
 # 여기 관여하지 않고 `_authenticated_user`를 그대로 쓴다.
 ASSIGNEE_HEADER = "x-workmate-assignee"
-ASSIGNEE_TO_USER_ID: dict[str, str] = {
-    # 지금까지 실사용해온 실제 Google sub 그대로 — Task·Meeting 데이터 연속성 유지.
-    "서선정": "10464531542706509691",
-    "배동우": "dev-assignee-video",
-    "이승현": "dev-assignee-develop",
-    "변해훈": "dev-assignee-gameqna",
-}
-
-
 def _enabled() -> bool:
     """내부 검증 API 활성화 여부를 환경변수에서 읽는다."""
 

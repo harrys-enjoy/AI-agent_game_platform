@@ -273,6 +273,11 @@ def resolve_internal_chat_fallback(content: str) -> str | None:
 
 
 async def resolve_internal_chat_route(content: str, selected_agent: str | None = None) -> dict[str, Any]:
+    lowered = content.lower()
+    meeting_intent = any(term in lowered for term in ("회의", "회의록", "음성파일", "녹음"))
+    analysis_intent = any(term in lowered for term in ("분석", "요약", "내용"))
+    if meeting_intent and analysis_intent:
+        return {"agent": "workmate-agent", "needs_selection": False}
     if selected_agent is not None:
         if selected_agent not in AGENT_CHAT_NAMES:
             raise HTTPException(status_code=422, detail="Unknown selected agent")
