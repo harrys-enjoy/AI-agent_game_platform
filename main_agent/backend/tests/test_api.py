@@ -217,7 +217,7 @@ def test_main_route_requires_confirmation_for_video_generation(monkeypatch):
     assert response.json()["handoff"] == "confirmation_required"
 
 
-def test_agent_chat_uses_its_explicit_agent_instead_of_rerouting(monkeypatch):
+def test_internal_agent_chat_routes_to_the_specialist_selected_by_router(monkeypatch):
     from app import main
 
     class FakeRouter:
@@ -232,7 +232,66 @@ def test_agent_chat_uses_its_explicit_agent_instead_of_rerouting(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["agent"] == "video-agent"
+    assert response.json()["agent"] == "dev-agent"
+    assert response.json()["target_chat"] == "Development Assistant"
+
+
+def test_internal_game_chat_routes_schedule_to_workmate(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            assert request == "사용자 요청:\n다음 주 회의 일정 잡아줘"
+            return {"selected_agents": ["workmate-agent"], "confidence": 0.97}
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post(
+        "/api/chats/Game Q&A/reply",
+        json={"content": "다음 주 회의 일정 잡아줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent"] == "workmate-agent"
+    assert response.json()["target_chat"] == "Workmate AI"
+
+
+def test_ambiguous_internal_chat_requires_agent_selection(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            assert request == "사용자 요청:\n이거 만들어줘"
+            return None
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post(
+        "/api/chats/Game Q&A/reply",
+        json={"content": "이거 만들어줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "needs_agent_selection",
+        "agent_options": ["Workmate AI", "Video Generation", "Development Assistant", "Game Q&A"],
+    }
+
+
+def test_explicit_game_command_bypasses_common_routing(monkeypatch):
+    from app import main
+
+    class FailIfCalled:
+        async def select(self, request):
+            raise AssertionError("explicit command must not be rerouted")
+
+    monkeypatch.setattr(main, "router", FailIfCalled())
+    response = TestClient(app).post(
+        "/api/chats/Workmate AI/reply",
+        json={"content": "/lore 홍길동"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent"] == "game-qna-agent"
+    assert response.json()["mode"] == "lore"
 
 
 def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
