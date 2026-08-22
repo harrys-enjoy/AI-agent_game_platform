@@ -24,13 +24,15 @@ function readPersistedTask(): { taskId: string; startedAt: number } | null {
   }
 }
 
-export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string; owner?: string } = {}) {
+export function VideoAgentPage({ initialBrief, owner, onRouteAway }: { initialBrief?: string; owner?: string; onRouteAway?: (targetChat: string, message: string) => void } = {}) {
   const [taskId, setTaskId] = useState<string | null>(() => readPersistedTask()?.taskId ?? null);
   const [startedAt, setStartedAt] = useState(() => readPersistedTask()?.startedAt ?? Date.now());
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [routeOptions, setRouteOptions] = useState<string[] | null>(null);
+  const [routeMessage, setRouteMessage] = useState("");
   const { task, reconnecting, error, notFound, resumePolling } = useVideoTaskPolling(taskId);
 
   useEffect(() => {
@@ -46,8 +48,26 @@ export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string;
   async function handleSubmit(message: string) {
     setSubmitError(null);
     setClarifyingQuestion(null);
+    setRouteOptions(null);
     setSubmitting(true);
     try {
+      const routeResponse = await fetch("http://127.0.0.1:8000/api/chats/Video%20Generation/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: message, owner }),
+      });
+      if (!routeResponse.ok) throw new Error(`요청 분류에 실패했습니다: HTTP ${routeResponse.status}`);
+      const route = await routeResponse.json() as { status: string; target_chat?: string; agent_options?: string[] };
+      if (route.status === "needs_agent_selection") {
+        setClarifyingQuestion("어느 Agent가 처리할지 선택해 주세요.");
+        setRouteOptions(route.agent_options ?? []);
+        setRouteMessage(message);
+        return;
+      }
+      if (route.target_chat && route.target_chat !== "Video Generation") {
+        onRouteAway?.(route.target_chat, message);
+        return;
+      }
       const response = await createVideoAgentTask(message, owner);
       if ("task" in response) {
         setTaskId(response.task.id);
@@ -116,6 +136,7 @@ export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string;
               {clarifyingQuestion}
             </p>
           )}
+          {routeOptions && <div className="flex flex-wrap gap-2">{routeOptions.map((option) => <button className="rounded border border-brief-border px-2 py-1 text-xs" type="button" key={option} onClick={() => onRouteAway?.(option, routeMessage)}>{option}</button>)}</div>}
           {submitError && (
             <p className="rounded bg-red-50 p-2 text-sm text-red-700" data-testid="submit-error">
               {submitError}

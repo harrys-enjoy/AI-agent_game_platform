@@ -294,6 +294,27 @@ def test_explicit_game_command_bypasses_common_routing(monkeypatch):
     assert response.json()["mode"] == "lore"
 
 
+def test_route_endpoint_selects_an_agent_without_calling_it(monkeypatch):
+    from app import main
+
+    class FakeRouter:
+        async def select(self, request):
+            return {"selected_agents": ["dev-agent"], "confidence": 0.97}
+
+    monkeypatch.setattr(main, "router", FakeRouter())
+    response = TestClient(app).post(
+        "/api/chats/Video Generation/route",
+        json={"content": "코드 버그 확인해줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "routed",
+        "target_agent": "dev-agent",
+        "target_chat": "Development Assistant",
+    }
+
+
 def test_story_review_proxy_calls_catalog_review_endpoint(monkeypatch):
     class FakeResponse:
         def raise_for_status(self):

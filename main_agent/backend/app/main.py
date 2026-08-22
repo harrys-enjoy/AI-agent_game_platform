@@ -386,6 +386,17 @@ def save_chat_message(agent_name: str, payload: ChatMessageRequest) -> dict[str,
     )
 
 
+@app.post("/api/chats/{agent_name}/route")
+async def route_agent_chat(agent_name: str, payload: ChatReplyRequest) -> dict[str, Any]:
+    if not payload.content.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    route = await resolve_internal_chat_route(payload.content, payload.selected_agent)
+    if route["needs_selection"]:
+        return {"status": "needs_agent_selection", "agent_options": list(AGENT_CHAT_NAMES.values())}
+    card_name = str(route["agent"])
+    return {"status": "routed", "target_agent": card_name, "target_chat": AGENT_CHAT_NAMES[card_name]}
+
+
 @app.post("/api/chats/{agent_name}/reply")
 async def chat_reply(agent_name: str, payload: ChatReplyRequest) -> dict:
     if not payload.content.strip():
