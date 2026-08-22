@@ -138,6 +138,12 @@ services:
   dev-agent:
     build: ../dev_agent
     expose: ["8003"]
+    # deploy_trigger가 이 소켓으로 호스트 Docker에 build/run을 직접 지시한다 - 컨테이너에
+    # 호스트 Docker에 대한 사실상 root 권한을 준다. REPO_ACCESS_CONTROL_DISABLED가 켜져
+    # 있으면 채팅에 적힌 아무 공개 레포나 이 PC에서 빌드/실행시킬 수 있다(의도적으로 열어둔
+    # 상태, 2026-08-21) - 신뢰 안 되는 사용자에게 노출하기 전에 그 스위치부터 끌 것.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     # env_file은 main_agent/.env 하나로 통합(dev_agent/.env는 더 이상 안 씀) — 아래 environment:에
     # 같은 키를 또 적으면 값이 비어있어도 그게 항상 이겨서 env_file 값을 덮어써버린다(실측 버그).
     env_file:

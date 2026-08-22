@@ -169,7 +169,10 @@ def _compose_services_running(docker: str, slot: str, compose_file: Path, run) -
     경로처럼 HTTP로 특정 URL을 찔러볼 수 없다 — `docker compose ps`의 상태로 판단한다.
     """
     total = run(
-        [docker, "compose", "-p", slot, "-f", str(compose_file), "ps", "--services"],
+        # -a: a crashed/exited container otherwise drops out of the default `ps` listing
+        # too, so a service that immediately died would silently vanish from both sides
+        # of this comparison and the crash would read as "all services running".
+        [docker, "compose", "-p", slot, "-f", str(compose_file), "ps", "--services", "-a"],
         capture_output=True,
         text=True,
         timeout=QUICK_TIMEOUT_SEC,
