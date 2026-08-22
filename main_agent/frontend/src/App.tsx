@@ -26,10 +26,12 @@ type ChatTask = { id: string; chat: string; title: string; status: "working" | "
 // 그대로 `ChatReplyRequest.confirmed_skill_id`/`confirmed_arguments`에 실어
 // 재전송한다(20번 문서 G5 대응, 2026-08-19).
 type PendingAction = { skill_id: string; arguments: Record<string, unknown> };
-type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] } | { id: string; kind: "pending-action"; action: PendingAction; chatName: string; text: string; state: "pending" | "confirming" | "done" | "cancelled" | "error" };
+type DevDashboardTheme = "dark" | "light";
+type ChatMessage = { id: string; kind: "text"; text: string } | { id: string; kind: "proposal"; proposal: Task; state: "pending" | "adding" | "added" | "cancelled" | "error" } | { id: string; kind: "unresolved-scenes"; taskId: string; scenes: UnresolvedScene[] } | { id: string; kind: "pending-action"; action: PendingAction; chatName: string; text: string; state: "pending" | "confirming" | "done" | "cancelled" | "error" } | { id: string; kind: "agent-selection"; sourceChat: string; request: string; options: string[] };
 type StoredMessage = { id: string; role: "user" | "assistant" | "system"; content: string; pending_action?: PendingAction | null };
 const legacySections = ["Today Briefing", "Weekly Report", "Policies"];
 const chats = ["Workmate AI", "Video Generation", "Development Assistant", "Game Q&A"];
+const agentIdsByChat: Record<string, string> = { "Workmate AI": "workmate-agent", "Video Generation": "video-agent", "Development Assistant": "dev-agent", "Game Q&A": "game-qna-agent" };
 const statuses = ["Ready to start", "In Progress", "Done", "Stuck", "Waiting for review"];
 const initialTasks: Task[] = [
   { id: "1", name: "게임 Q&A 지식 검색", owner: "PW", status: "Done", agent: "Game Q&A" },
@@ -80,11 +82,18 @@ function rebuildChatFromHistory(messages: StoredMessage[], chatName: string): Ch
 const PENDING_ACTION_CONFIRM_WORDS = new Set(["응", "네", "넵", "예", "확인", "좋아", "오케이", "ok", "okay", "yes", "y"]);
 const PENDING_ACTION_CANCEL_WORDS = new Set(["아니", "아니요", "아니오", "취소", "no", "n"]);
 
+function readableErrorDetail(detail: unknown): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") return detail.message;
+  return "담당 Agent 요청을 처리하지 못했습니다. 다시 시도해 주세요.";
+}
+
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [pendingMainHandoff, setPendingMainHandoff] = useState<{ chat: string; message: string } | null>(null);
+  const [devDashboardTheme, setDevDashboardTheme] = useState<DevDashboardTheme>("light");
   const [chatSessions, setChatSessions] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState("Today Briefing");
   const [activeChat, setActiveChat] = useState<string | null>(null);
@@ -197,6 +206,18 @@ export default function App() {
     }
     window.addEventListener("main-chat-route", routeFromMain);
     return () => window.removeEventListener("main-chat-route", routeFromMain);
+  }, []);
+
+  useEffect(() => {
+    function syncDevDashboardTheme(event: MessageEvent<unknown>) {
+      if (!new Set(["http://localhost:8004", "http://127.0.0.1:8004"]).has(event.origin)) return;
+      const data = event.data;
+      if (!data || typeof data !== "object" || !("type" in data) || !("theme" in data)) return;
+      if (data.type !== "dev-dashboard-theme" || (data.theme !== "dark" && data.theme !== "light")) return;
+      setDevDashboardTheme(data.theme);
+    }
+    window.addEventListener("message", syncDevDashboardTheme);
+    return () => window.removeEventListener("message", syncDevDashboardTheme);
   }, []);
 
   useEffect(() => {
@@ -418,7 +439,16 @@ export default function App() {
     await submitAgentRequest(currentChat, request);
   }
 
-  async function submitAgentRequest(responseChat: string, request: string) {
+  function switchToAgentChat(targetChat: string, sourceChat: string, request: string, reply: string, pendingAction: PendingAction | null) {
+    activateChatTask(targetChat);
+    activeChatRef.current = targetChat;
+    setActiveSection("Home");
+    setActiveChat(targetChat);
+    persistMessage("user", `[${sourceChat}에서 전달됨] ${request}`, undefined, targetChat);
+    persistMessage("assistant", reply, pendingAction, targetChat);
+  }
+
+  async function submitAgentRequest(responseChat: string, request: string, selectedAgent?: string, isSelection = false) {
     const gameQnaCommand = responseChat === "Game Q&A" ? resolveChatCommand(request) : null;
     if (responseChat === "Game Q&A") {
       if (gameQnaCommand?.kind === "help") {
@@ -438,8 +468,10 @@ export default function App() {
     }
     startChatTask(responseChat);
     if (responseChat === "Game Q&A") recordGameQnaWork(request, "진행 중");
-    setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }]);
-    persistMessage("user", request, undefined, responseChat);
+    if (!isSelection) {
+      setChat((items) => [...items, { id: `message-${Date.now()}`, kind: "text", text: `You: ${request}` }]);
+      persistMessage("user", request, undefined, responseChat);
+    }
     if (getTaskAction(request) === "confirm") {
       const proposal = createTaskProposal(request, `proposal-${Date.now()}`);
       if (!proposal) return;
@@ -452,19 +484,23 @@ export default function App() {
       const response = await fetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(responseChat)}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: request, owner: assigneeName }),
+        body: JSON.stringify({ content: request, owner: assigneeName, selected_agent: selectedAgent }),
       });
       if (!response.ok) {
         let detail = `Agent reply failed (${response.status})`;
         try {
-          const errorData = await response.json() as { detail?: string };
-          if (errorData.detail) detail = errorData.detail;
+          const errorData = await response.json() as { detail?: unknown };
+          if (errorData.detail) detail = readableErrorDetail(errorData.detail);
         } catch {
           // Keep the HTTP status when the server does not return JSON.
         }
         throw new Error(detail);
       }
-      const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[]; pending_action?: { skill_id?: string; arguments?: Record<string, unknown> } | null };
+      const data = await response.json() as { answer?: string; taskId?: string; unresolvedScenes?: RawUnresolvedScene[]; pending_action?: { skill_id?: string; arguments?: Record<string, unknown> } | null; status?: string; target_chat?: string; agent_options?: string[] };
+      if (data.status === "needs_agent_selection") {
+        setChat((items) => [...items, { id: `agent-selection-${Date.now()}`, kind: "agent-selection", sourceChat: responseChat, request, options: data.agent_options ?? chats }]);
+        return;
+      }
       const rawReply = data.answer || createChatReply(request);
       const artPrompt = responseChat === "Game Q&A" ? extractArtPrompt(rawReply) : null;
       const reply = artPrompt ? formatArtPromptForChat(artPrompt) : rawReply;
@@ -481,6 +517,10 @@ export default function App() {
       const normalizedPendingAction: PendingAction | null = data.pending_action?.skill_id
         ? { skill_id: data.pending_action.skill_id, arguments: data.pending_action.arguments ?? {} }
         : null;
+      if (data.target_chat && data.target_chat !== responseChat) {
+        switchToAgentChat(data.target_chat, responseChat, request, reply, normalizedPendingAction);
+        return;
+      }
       persistMessage("assistant", reply, normalizedPendingAction, responseChat);
       if (!shouldApplyChatResponse(activeChatRef.current, responseChat)) return;
       const textMessage: ChatMessage = { id: `response-${Date.now()}`, kind: "text", text: reply };
@@ -508,6 +548,7 @@ export default function App() {
 
   function renderChatMessage(item: ChatMessage) {
     if (item.kind === "text") return <p className="chat-answer" key={item.id}>{item.text}</p>;
+    if (item.kind === "agent-selection") return <div className="proposal-card" key={item.id}><strong>담당 Agent를 선택해 주세요</strong><div className="proposal-actions">{item.options.map((option) => <button className="save-task" type="button" key={option} onClick={() => void submitAgentRequest(item.sourceChat, item.request, agentIdsByChat[option], true)}>{option}</button>)}</div></div>;
     if (item.kind === "pending-action") return <div className={`proposal-card ${item.state}`} key={item.id}><strong>실행 확인 필요</strong><div className="proposal-row"><span>Skill</span><b>{item.action.skill_id}</b></div>{item.state === "pending" && <div className="proposal-actions"><button type="button" className="save-task" onClick={() => void confirmPendingAction(item.id)}>확인</button><button type="button" className="cancel-task" onClick={() => cancelPendingAction(item.id)}>취소</button></div>}{item.state === "confirming" && <small>실행 중...</small>}{item.state === "done" && <small className="proposal-success">실행 완료.</small>}{item.state === "cancelled" && <small>요청을 취소했습니다.</small>}{item.state === "error" && <small className="proposal-error">실행에 실패했습니다. 다시 시도해 주세요.</small>}</div>;
     if (item.kind === "unresolved-scenes") return <div className="proposal-card unresolved-scenes-card" key={item.id}><strong>수동 수정이 필요한 장면</strong>{item.scenes.map((scene) => <div className="unresolved-scene-row" key={scene.sceneId}><img className="unresolved-scene-thumb" src={scene.imageUrl} alt={scene.sceneId} /><div className="unresolved-scene-info"><b>{scene.sceneId}</b><ul>{scene.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>{scene.status === "pending" && <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadSceneFix(item.id, item.taskId, scene.sceneId, file); event.target.value = ""; }} />}{scene.status === "uploading" && <small>업로드 중...</small>}{scene.status === "error" && <small className="unresolved-scene-error">업로드 실패. 다시 시도해 주세요.</small>}</div></div>)}</div>;
     return <div className={`proposal-card ${item.state}`} key={item.id}><strong>Task proposal</strong><div className="proposal-row"><span>Task</span><b>{item.proposal.name}</b></div><div className="proposal-row"><span>Owner</span><b>{item.proposal.owner}</b></div><div className="proposal-row"><span>Status</span><b>{item.proposal.status}</b></div><div className="proposal-row"><span>Agent</span><b>{item.proposal.agent}</b></div>{item.state === "pending" && <div className="proposal-actions"><button type="button" className="save-task" onClick={() => confirmProposal(item.id)}>Add Task</button><button type="button" className="cancel-task" onClick={() => cancelProposal(item.id)}>Cancel</button></div>}{item.state === "adding" && <small>Adding task...</small>}{item.state === "added" && <small className="proposal-success">Task added to Project Task.</small>}{item.state === "cancelled" && <small>Task addition cancelled.</small>}{item.state === "error" && <small className="proposal-error">Task could not be added. Check the API connection.</small>}</div>;
@@ -523,7 +564,7 @@ export default function App() {
 
   const referenceReportKind = activeSection === "Today Briefing" ? "briefing" : activeSection === "Weekly Report" ? "weekly" : null;
 
-  return <div className={`shell legacy-ui ${activeChat ? "chat-active agent-content-updated" : "section-active"}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant="legacy" activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant="updated" currentChat={activeChat} onSelect={selectQuickAction} assigneeName={assigneeName} onRecordingChange={setIsRecordingMeeting} />{activeChat === "Video Generation" && <div className="video-agent-host"><VideoAgentPage initialBrief={message} owner={assigneeName} /></div>}{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
+  return <div className={`shell legacy-ui ${activeChat ? "chat-active agent-content-updated" : "section-active"} ${activeChat === "Development Assistant" && devDashboardTheme === "dark" ? "dev-theme-dark" : ""}`} data-active-chat={currentChat} data-active-section={activeSection}><UpdatedReportNav variant="legacy" activeSection={activeSection} activeChat={activeChat} onSelect={handleSectionClick} /><TaskQuickActions variant="updated" currentChat={activeChat} onSelect={selectQuickAction} assigneeName={assigneeName} onRecordingChange={setIsRecordingMeeting} />{activeChat === "Video Generation" && <div className="video-agent-host"><VideoAgentPage initialBrief={message} owner={assigneeName} onRouteAway={(targetChat, request) => void submitAgentRequest("Video Generation", request, agentIdsByChat[targetChat], true)} /></div>}{activeSection === "Today Briefing" && !activeChat && <><ReferenceBriefingPanel kind="briefing" assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}{activeSection === "Weekly Report" && !activeChat && <><WeeklyReportPanel assigneeName={assigneeName} /><button className="report-confirm-button report-confirm-floating" type="button" onClick={confirmReport}>확인 완료</button></>}
     <aside className="sidebar"><h2>WorkMate AI</h2><button className="create" type="button">+ Create</button>{legacySections.map((item) => item === "Policies" ? <div key={item}><button className={`nav works-toggle ${activeSection === "Company Policies" || activeSection === "Operational Policies" ? "active" : ""}`} type="button" aria-expanded={policiesOpen} onClick={() => setPoliciesOpen((open) => !open)}>◇ Policies <span>{policiesOpen ? "▾" : "▸"}</span></button>{policiesOpen && <div className="nested-links policy-links"><button className={`nested-link ${activeSection === "Company Policies" ? "active" : ""}`} type="button" onClick={() => { setActiveSection("Company Policies"); setActiveChat(null); }}>사내규정</button><button className={`nested-link ${activeSection === "Operational Policies" ? "active" : ""}`} type="button" onClick={() => { setActiveSection("Operational Policies"); setActiveChat(null); }}>운영 원칙(Task 기록)</button></div>}</div> : <button className={`nav ${activeSection === item && !activeChat ? "active" : ""}`} type="button" aria-pressed={activeSection === item && !activeChat} onClick={() => handleSectionClick(item)} key={item}>◇ {item === "Today Briefing" ? "오늘 브리핑" : item === "Weekly Report" ? "주간 업무보고" : item}</button>)}<><button className="nav works-toggle" type="button" aria-expanded={worksOpen} onClick={() => setWorksOpen((open) => !open)}>◇ Works <span>{worksOpen ? "▾" : "▸"}</span></button>{worksOpen && <div className="nested-links">{chats.map((item) => <button className={`nested-link ${activeChat === item ? "active" : ""}`} type="button" onClick={() => handleChatClick(item)} key={item}>{item}</button>)}</div>}<hr /><button className="section-toggle" type="button" aria-expanded={aiChatsOpen} onClick={() => setAiChatsOpen((open) => !open)}><small>Agent Work</small><span>{aiChatsOpen ? "▾" : "▸"}</span></button>{aiChatsOpen && <div className="nested-links task-links">{chatTasks.filter((task) => !task.hidden).map((task) => <div className="nested-task-row" key={task.id}><button className="nested-task" type="button" onClick={() => handleChatClick(task.chat)}><span className={task.status === "working" ? "task-working-dot" : "task-done-space"}>{task.status === "working" ? "○" : ""}</span>{task.title}</button><button className="nested-task-delete" type="button" aria-label={`${task.title} 삭제`} onClick={() => hideChatTask(task.id)}>×</button></div>)}</div>}</> <AssigneeSwitcher name={assigneeName} onChange={changeAssignee} assignments={assignments} onSaveAssignments={saveAssignments} /></aside>
     {activeChat !== "Video Generation" && <><main className="workspace">{activeSection === "Policies" && !activeChat ? renderPolicies() : activeChat === "Development Assistant" ? <><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>Project Demonstration</h1></div><span className="live">● 4 Agents connected</span></div><PreviewPanel currentChat={currentChat} recentGameQnaWork={recentGameQnaWork} artPrompt={pendingArtPrompt} artPromptTransferStatus={artPromptTransferStatus} onSendArtPromptToVideo={() => void sendArtPromptToVideo()} /></> : <><div className="title-row"><div><p className="eyebrow">MAIN AGENT / {activeChat ?? activeSection.toUpperCase()}</p><h1>Project Demonstration</h1></div><span className="live">● 4 Agents connected</span></div><section className="table-card"><div className="table-head"><span>Task</span><span>Owner</span><span>Status</span><span>Agent</span></div>{tasks.map((task) => editingTaskId === task.id && draftTask ? <div className="task-row task-edit-row" key={task.id}><span>{task.name}</span><input value={draftTask.owner} onChange={(event) => setDraftTask({ ...draftTask, owner: event.target.value })} aria-label="Owner" placeholder="Owner" /><select value={draftTask.status} onChange={(event) => setDraftTask({ ...draftTask, status: event.target.value })} aria-label="Status">{statuses.map((status) => <option key={status}>{status}</option>)}</select><div className="edit-actions"><select value={draftTask.agent} onChange={(event) => setDraftTask({ ...draftTask, agent: event.target.value })} aria-label="Agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="button" onClick={commitEdit} onMouseDown={commitEdit}>Save</button><button className="cancel-task" type="button" onClick={cancelEdit} onMouseDown={cancelEdit}>Cancel</button></div></div> : <div className="task-row" key={task.id}><span>□&nbsp;{task.name}</span><span className="owner">{task.owner || "○"}</span><span><b className={`status ${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</b></span><span className="agent-actions"><button className="agent-button" type="button">{task.agent} ↗</button><button className="edit-task" type="button" onClick={() => startEdit(task)}>Edit</button></span></div>)}{isAddingTask && <form className="task-form" onSubmit={addTask}><input autoFocus value={newTaskName} onChange={(event) => setNewTaskName(event.target.value)} placeholder="Task name" aria-label="Task name" /><select value={newTaskAgent} onChange={(event) => setNewTaskAgent(event.target.value)} aria-label="Task agent">{chats.map((agent) => <option key={agent}>{agent}</option>)}</select><button className="save-task" type="submit">Add</button><button className="cancel-task" type="button" onClick={() => setIsAddingTask(false)}>Cancel</button></form>}<button className="add-task" type="button" onClick={() => setIsAddingTask(true)}>+ Add task</button></section><PreviewPanel currentChat={currentChat} recentGameQnaWork={recentGameQnaWork} artPrompt={pendingArtPrompt} artPromptTransferStatus={artPromptTransferStatus} onSendArtPromptToVideo={() => void sendArtPromptToVideo()} /></>}</main>
     <aside className="chat-panel"><h3>AI Chat · {currentChat}<button className="reset-chat" type="button" onClick={() => void resetChat()}>Reset chat</button>{currentChat === "Game Q&A" && <button className="story-toggle" type="button" onClick={() => setIsStoryFormOpen((value) => !value)}>{isStoryFormOpen ? "Close" : "+ Add story"}</button>}</h3>{currentChat === "Game Q&A" && isStoryFormOpen && <form className="story-form" onSubmit={addStory}><input value={storyName} onChange={(event) => setStoryName(event.target.value)} placeholder="Story title" required /><input value={storyKeywords} onChange={(event) => setStoryKeywords(event.target.value)} placeholder="Keywords, comma separated" required /><textarea value={storyAnswer} onChange={(event) => setStoryAnswer(event.target.value)} placeholder="Story content" rows={5} required /><button type="submit">Save story</button>{storyNotice && <small>{storyNotice}</small>}</form>}{currentChat === "Game Q&A" && showCommandHelp && <div className="command-help" role="dialog" aria-label="Game Q&A commands"><div className="command-help-heading"><strong>Game Q&A 명령어</strong><button type="button" className="command-help-close" onClick={() => setShowCommandHelp(false)}>닫기</button></div>{commandCatalog.map((item) => <button type="button" className="command-item" key={item.command} onClick={() => selectGameQaCommand(item.command)}><strong>{item.command}</strong><span>{item.label} · {item.description}</span></button>)}</div>}<div className="messages" ref={messagesRef}>{chat.length ? chat.map(renderChatMessage) : <div className="empty">Type a message to start a conversation</div>}</div><form className="composer" onSubmit={submit}><input ref={composerInputRef} value={message} onChange={(event) => { setMessage(event.target.value); if (currentChat === "Game Q&A" && (event.target.value === "/" || event.target.value.startsWith("/?") || event.target.value.startsWith("/help"))) setShowCommandHelp(true); }} onKeyDown={(event) => { if (event.key === "Escape") setShowCommandHelp(false); }} placeholder={currentChat === "Game Q&A" ? "Type /? for Game Q&A commands..." : "Type a message..."} />{message && <button type="button" className="clear-message" aria-label="입력 지우기" title="입력 지우기" onClick={() => { setMessage(""); composerInputRef.current?.focus(); }}>✕</button>}<button type="submit">➤</button></form></aside></>}

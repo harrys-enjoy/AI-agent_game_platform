@@ -12,7 +12,7 @@ export function updateTask(task: CreatedTask, changes: Pick<CreatedTask, "owner"
 }
 
 export function isTaskRequest(request: string): boolean {
-  return /(?:추가|등록|할당|만들)/i.test(request) && /(?:\btask\b|작업|할\s*일|일정)/i.test(request);
+  return /(?:추가|등록|할당|만들)/i.test(request) && /(?:\btask\b|작업|할\s*일)/i.test(request);
 }
 
 export function getTaskAction(request: string): "chat" | "confirm" {

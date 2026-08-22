@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ComposerTabs } from "./ComposerTabs";
 import { FormComposer } from "./FormComposer";
-import { StatusBadge } from "./StatusBadge";
+import { StatusBadge, TERMINAL_STATES } from "./StatusBadge";
 import { TaskCanvas } from "./TaskCanvas";
 import { VeoUsageBadge } from "./VeoUsageBadge";
 import { VideoGallery } from "./VideoGallery";
@@ -24,18 +24,27 @@ function readPersistedTask(): { taskId: string; startedAt: number } | null {
   }
 }
 
-export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string; owner?: string } = {}) {
+export function VideoAgentPage({ initialBrief, owner, onRouteAway }: { initialBrief?: string; owner?: string; onRouteAway?: (targetChat: string, message: string) => void } = {}) {
   const [taskId, setTaskId] = useState<string | null>(() => readPersistedTask()?.taskId ?? null);
   const [startedAt, setStartedAt] = useState(() => readPersistedTask()?.startedAt ?? Date.now());
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unresolvedScenes, setUnresolvedScenes] = useState<UnresolvedScene[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [routeOptions, setRouteOptions] = useState<string[] | null>(null);
+  const [routeMessage, setRouteMessage] = useState("");
   const { task, reconnecting, error, notFound, resumePolling } = useVideoTaskPolling(taskId);
 
   useEffect(() => {
     if (notFound) window.localStorage.removeItem(STORAGE_KEY);
   }, [notFound]);
+
+  useEffect(() => {
+    // 완료/실패 등 종료 상태에 도달한 태스크를 계속 "진행 중"으로 남겨두면, 나중에
+    // 페이지를 새로고침할 때 그 오래된 startedAt이 되살아나 실제 소요 시간이 아니라
+    // 제출 후 지난 실제 시간(예: 79760s)이 그대로 표시된다 - 끝난 태스크는 지운다.
+    if (task && TERMINAL_STATES.includes(task.status.state)) window.localStorage.removeItem(STORAGE_KEY);
+  }, [task?.status.state]);
 
   useEffect(() => {
     if (task?.status.state === "TASK_STATE_INPUT_REQUIRED" && task.status.unresolvedScenes) {
@@ -46,8 +55,26 @@ export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string;
   async function handleSubmit(message: string) {
     setSubmitError(null);
     setClarifyingQuestion(null);
+    setRouteOptions(null);
     setSubmitting(true);
     try {
+      const routeResponse = await fetch("http://127.0.0.1:8000/api/chats/Video%20Generation/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: message, owner }),
+      });
+      if (!routeResponse.ok) throw new Error(`요청 분류에 실패했습니다: HTTP ${routeResponse.status}`);
+      const route = await routeResponse.json() as { status: string; target_chat?: string; agent_options?: string[] };
+      if (route.status === "needs_agent_selection") {
+        setClarifyingQuestion("어느 Agent가 처리할지 선택해 주세요.");
+        setRouteOptions(route.agent_options ?? []);
+        setRouteMessage(message);
+        return;
+      }
+      if (route.target_chat && route.target_chat !== "Video Generation") {
+        onRouteAway?.(route.target_chat, message);
+        return;
+      }
       const response = await createVideoAgentTask(message, owner);
       if ("task" in response) {
         setTaskId(response.task.id);
@@ -116,6 +143,7 @@ export function VideoAgentPage({ initialBrief, owner }: { initialBrief?: string;
               {clarifyingQuestion}
             </p>
           )}
+          {routeOptions && <div className="flex flex-wrap gap-2">{routeOptions.map((option) => <button className="rounded border border-brief-border px-2 py-1 text-xs" type="button" key={option} onClick={() => onRouteAway?.(option, routeMessage)}>{option}</button>)}</div>}
           {submitError && (
             <p className="rounded bg-red-50 p-2 text-sm text-red-700" data-testid="submit-error">
               {submitError}

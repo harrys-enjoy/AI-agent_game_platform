@@ -10,13 +10,13 @@ describe("FormComposer", () => {
     render(<FormComposer disabled={false} onSubmit={onSubmit} />);
 
     await userEvent.type(screen.getByLabelText("브리프"), "할로윈 이벤트");
-    await userEvent.type(screen.getByLabelText("길이(초)"), "15");
+    await userEvent.type(screen.getByLabelText("길이(초)"), "20");
     await userEvent.selectOptions(screen.getByLabelText("프리셋"), "이벤트");
     await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));
 
     const message = onSubmit.mock.calls[0][0] as string;
     expect(message).toContain("할로윈 이벤트");
-    expect(message).toMatch(/15\s*초/);
+    expect(message).toMatch(/20\s*초/);
     expect(message).toContain("이벤트");
   });
 
@@ -49,6 +49,20 @@ describe("FormComposer", () => {
     await userEvent.type(screen.getByLabelText("길이(초)"), "45");
 
     expect(screen.getByTestId("duration-cap-warning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("blocks submit and warns when duration is under the 16s floor", async () => {
+    const onSubmit = vi.fn();
+    render(<FormComposer disabled={false} onSubmit={onSubmit} />);
+
+    await userEvent.type(screen.getByLabelText("브리프"), "할로윈 이벤트");
+    await userEvent.type(screen.getByLabelText("길이(초)"), "12");
+
+    expect(screen.getByTestId("duration-min-warning")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "생성 요청" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "생성 요청" }));

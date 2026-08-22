@@ -4,6 +4,11 @@ import { composeStructuredBrief } from "./brief-compose";
 const INTEGER_PATTERN = /^\d*$/;
 const DECIMAL_PATTERN = /^\d*\.?\d*$/;
 const MAX_DURATION_SEC = 30;
+// 스토리보드가 항상 4개 비트(설정/갈등/절정/결말)로 나누고(gemini_planning_agent.py),
+// Veo는 4/6/8초짜리 클립만 만들 수 있어 각 비트가 그 중 가장 가까운 값으로 반올림된다
+// (veo_backend.py의 ALLOWED_DURATIONS). 비트 4개가 전부 최소값(4초)으로 반올림되는
+// 경우가 바닥이라 - 4초 미만을 요청해도 결과물은 항상 16초가 된다.
+const MIN_DURATION_SEC = 16;
 const MAX_BUDGET_USD = 10;
 
 function toFiniteNumber(value: string): number | undefined {
@@ -22,12 +27,14 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
   const budgetRef = useRef<HTMLInputElement>(null);
   const durationValue = toFiniteNumber(durationSec);
   const durationTooLong = durationValue !== undefined && durationValue > MAX_DURATION_SEC;
+  const durationTooShort = durationValue !== undefined && durationValue < MIN_DURATION_SEC;
+  const durationInvalid = durationTooLong || durationTooShort;
   const budgetValue = toFiniteNumber(maxBudgetUsd);
   const budgetOverCap = budgetValue !== undefined && budgetValue > MAX_BUDGET_USD;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (brief.trim().length < 5 || durationTooLong) return;
+    if (brief.trim().length < 5 || durationInvalid) return;
     const message = composeStructuredBrief({
       brief,
       durationSec: toFiniteNumber(durationSec),
@@ -90,6 +97,11 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
           영상 길이는 {MAX_DURATION_SEC}초를 넘을 수 없습니다.
         </p>
       )}
+      {durationTooShort && (
+        <p className="-mt-1 text-xs text-red-600" data-testid="duration-min-warning">
+          영상 길이는 최소 {MIN_DURATION_SEC}초 이상이어야 합니다 (4개 장면 × 최소 4초).
+        </p>
+      )}
       <select
         value={preset}
         onChange={(event) => setPreset(event.target.value)}
@@ -143,7 +155,7 @@ export function FormComposer({ disabled, onSubmit }: { disabled: boolean; onSubm
       )}
       <button
         type="submit"
-        disabled={disabled || brief.trim().length < 5 || durationTooLong}
+        disabled={disabled || brief.trim().length < 5 || durationInvalid}
         className="rounded-[8px] bg-brief-accent px-3 py-2 text-sm text-white disabled:opacity-40"
       >
         생성 요청

@@ -15,3 +15,6 @@
 **/build/
 **/.vite/
 **/*.tsbuildinfo
+
+# local linked worktrees
+/.worktrees/
