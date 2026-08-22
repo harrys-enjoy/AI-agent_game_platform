@@ -54,6 +54,16 @@ test("routes a schedule summary request to chat instead of task creation", () =>
   assert.equal(getTaskAction("오늘 일정 정리해줘"), "chat");
 });
 
+test("does not intercept schedule or meeting requests as Project Tasks", () => {
+  assert.equal(getTaskAction("다음 주 회의 일정 추가해줘"), "chat");
+  assert.equal(getTaskAction("캘린더에 일정 등록해줘"), "chat");
+});
+
+test("keeps explicit Project Task requests in confirmation flow", () => {
+  assert.equal(getTaskAction("이 내용을 Task로 추가해줘"), "confirm");
+  assert.equal(getTaskAction("이 작업을 할 일로 등록해줘"), "confirm");
+});
+
 test("returns a visible reply for a normal chat message", () => {
   assert.match(createChatReply("홍길동"), /홍길동/);
 });
