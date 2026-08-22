@@ -108,6 +108,28 @@ describe("App - Video Generation sidebar entry", () => {
     );
   });
 
+  it("switches from Game Q&A to Workmate when the reply names Workmate as the target chat", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes("/api/chats/Game%20Q%26A/reply")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ answer: "회의 시간을 알려주세요.", agent: "workmate-agent", target_chat: "Workmate AI", status: "succeeded" }),
+        });
+      }
+      if (url.includes("/session")) return Promise.resolve({ ok: true, json: async () => ({ session_id: "session-1", messages: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    await userEvent.click(screen.getByText("Game Q&A"));
+    const input = await screen.findByPlaceholderText("Type /? for Game Q&A commands...");
+    await userEvent.type(input, "다음 주 회의 일정 잡아줘");
+    await userEvent.click(input.closest("form")!.querySelector("button[type='submit']")!);
+
+    expect(await screen.findByRole("heading", { name: /AI Chat · Workmate AI/ })).toBeInTheDocument();
+  });
+
   it("prefills Video Generation without sending a confirmation-required Main handoff", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
     vi.stubGlobal("fetch", fetchMock);
