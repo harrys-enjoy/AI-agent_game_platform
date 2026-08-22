@@ -145,4 +145,19 @@ describe("App - Video Generation sidebar entry", () => {
       expect.anything(),
     ));
   });
+
+  it("darkens only the Development workspace when its dashboard selects dark mode", async () => {
+    render(<App />);
+
+    await userEvent.click(screen.getByText("Development Assistant"));
+    expect(await screen.findByTitle("dev-agent GitHub dashboard")).toBeInTheDocument();
+
+    window.dispatchEvent(new MessageEvent("message", {
+      origin: "http://localhost:8004",
+      data: { type: "dev-dashboard-theme", theme: "dark" },
+    }));
+
+    await waitFor(() => expect(document.querySelector('[data-active-chat="Development Assistant"]')).toHaveClass("dev-theme-dark"));
+    expect(document.querySelector(".chat-panel")).not.toHaveClass("dev-theme-dark");
+  });
 });
