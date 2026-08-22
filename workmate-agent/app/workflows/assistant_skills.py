@@ -102,7 +102,11 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
     """
 
     from app.providers.google import GmailAdapter, GoogleProviderError
-    from app.providers.google_auth import GoogleCredentialError, build_authorized_session
+    from app.providers.google_auth import (
+        GoogleCredentialError,
+        build_authorized_session,
+        build_authorized_session_for_user,
+    )
 
     message_id = request.payload.get("message_id")
     if message_id:
@@ -123,6 +127,29 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         secret = Path(os.getenv(_GMAIL_CLIENT_SECRET_FILE_ENV, str(_GMAIL_OAUTH_TEST_DIR / "client_secret.json")))
         token = Path(os.getenv(_GMAIL_TOKEN_FILE_ENV, str(_GMAIL_OAUTH_TEST_DIR / "token.json")))
         return secret, token
+
+    def _session() -> Any:
+        """개별 연결(`app/google_oauth_web.py`의 "Google 계정 연결")을 최우선으로
+        쓰고, 없으면 기존 공유 `token.json`으로 폴백한다.
+
+        `app/workflows/daily_briefing.py`의 `_session()`과 같은 순서다
+        (2026-08-19 결정) — 이 함수만 그 순서를 빼먹은 채 공유 파일만 보고
+        있어서, 개별 연결을 이미 마친 사람도 "메일 읽기"에서는 계속 공유
+        계정(`token.json`)을 봤다. 공유 파일이 아예 없거나(디렉터리로 잘못
+        생성된 경우 포함) 만료됐어도, 개별 연결만 돼 있으면 이 Skill이
+        정상 동작해야 한다.
+        """
+
+        if request.user_id:
+            try:
+                return build_authorized_session_for_user(request.user_id, _GMAIL_READ_SCOPES)
+            except GoogleCredentialError:
+                pass  # 개별 연결 없음 — 아래 공유 계정으로 폴백
+
+        _secret_path, token_path = _credential_paths()
+        if not token_path.exists():
+            raise GoogleCredentialError("Gmail 인증이 안 되어 있습니다.")
+        return build_authorized_session(token_path, _GMAIL_READ_SCOPES)
 
     def _unavailable(reason: str, *, searched_by_query: bool) -> WorkflowResult:
         data = {
@@ -145,12 +172,9 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         )
 
     searched_by_query = message_id is None
-    _secret_path, token_path = _credential_paths()
-    if not token_path.exists():
-        return _unavailable("Gmail 인증이 안 되어 있어 메일 내용을 다시 가져올 수 없습니다.", searched_by_query=searched_by_query)
 
     try:
-        session = build_authorized_session(token_path, _GMAIL_READ_SCOPES)
+        session = _session()
         adapter = GmailAdapter(session)
         if searched_by_query:
             sanitized_query = _sanitize_gmail_query_text(str(query))
