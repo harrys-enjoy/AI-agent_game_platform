@@ -341,70 +341,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Oldest commit on the left, newest on the right
+    // Oldest commit first — gitgraph.js builds the graph by replaying history in order.
     const nodes = [...treeNodes].reverse();
+    const nodeBySha = new Map(nodes.map(n => [n.sha, n]));
 
-    // One lane per unique branch, in order of first appearance
-    // ponytail: lane = raw branch string, no parent/child merge-edge math — real git_tree data has no reliable parent graph across mixed live/mock sources
+    // Lane order + colors, kept only for the legend pills — gitgraph.js does its own layout.
     const laneIndex = new Map();
-    nodes.forEach(n => {
-      if (!laneIndex.has(n.branch)) laneIndex.set(n.branch, laneIndex.size);
-    });
+    nodes.forEach(n => { if (!laneIndex.has(n.branch)) laneIndex.set(n.branch, laneIndex.size); });
     const lanes = [...laneIndex.keys()];
     const colorOf = (branch) => LANE_COLORS[laneIndex.get(branch) % LANE_COLORS.length];
-
-    const padX = 40;
-    const width = 900;
-    const rowHeight = 40;
-    const topPad = 30;
-    const height = topPad * 2 + (lanes.length - 1) * rowHeight;
-    const xStep = nodes.length > 1 ? (width - padX * 2) / (nodes.length - 1) : 0;
-    const xOf = (idx) => padX + idx * xStep;
-    const yOf = (branch) => topPad + laneIndex.get(branch) * rowHeight;
-
-    const laneLines = lanes.map(branch => {
-      const xs = nodes.map((n, idx) => n.branch === branch ? xOf(idx) : null).filter(x => x !== null);
-      const x1 = Math.min(...xs);
-      const x2 = Math.max(Math.max(...xs), x1 + 1);
-      const y = yOf(branch);
-      return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${colorOf(branch)}" stroke-width="4" stroke-linecap="round" />`;
-    }).join('');
-
-    // Connector lines from each branch's real merge-base commit (backend-resolved via
-    // GitHub's /compare) to that branch's own oldest commit — shows where it actually
-    // forked instead of leaving lanes floating unconnected.
-    const forkConnectors = (branchForks || []).map(fork => {
-      const forkIdx = nodes.findIndex(n => n.sha === fork.fork_sha);
-      const childIndices = nodes.map((n, idx) => n.branch === fork.branch ? idx : null).filter(idx => idx !== null);
-      if (forkIdx === -1 || childIndices.length === 0 || !laneIndex.has(fork.branch)) return '';
-      const childIdx = Math.min(...childIndices);
-      const x1 = xOf(forkIdx), y1 = yOf(nodes[forkIdx].branch);
-      const x2 = xOf(childIdx), y2 = yOf(fork.branch);
-      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${colorOf(fork.branch)}" stroke-width="2" stroke-dasharray="5,4" opacity="0.7" />`;
-    }).join('');
-
-    const nodeMarkers = nodes.map((n, idx) => {
-      const x = xOf(idx);
-      const y = yOf(n.branch);
-      const color = colorOf(n.branch);
-      const safeMsg = (n.message || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      return `
-        <g style="cursor: pointer;" onclick="openCommitModal('${n.sha}', '${safeMsg}', '${n.author}', '${n.branch}')">
-          <title>${n.sha} · ${(n.message || '').replace(/</g, '&lt;')}</title>
-          <circle cx="${x}" cy="${y}" r="13" fill="#0f172a" stroke="${color}" stroke-width="4"/>
-          <circle cx="${x}" cy="${y}" r="5" fill="${color}"/>
-          <text x="${x}" y="${y - 18}" fill="#f3f4f6" font-size="11" font-weight="700" text-anchor="middle" font-family="Fira Code">${n.sha}</text>
-        </g>
-      `;
-    }).join('');
-
-    DOM.gitTreeContainer.innerHTML = `
-      <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-        ${laneLines}
-        ${forkConnectors}
-        ${nodeMarkers}
-      </svg>
-    `;
 
     if (DOM.branchPillsColumn) {
       DOM.branchPillsColumn.innerHTML = lanes.map(branch => `
@@ -413,6 +358,66 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `).join('');
     }
+
+    // Real fork point per branch (backend-resolved via GitHub's /compare merge-base),
+    // so a branch forks from its actual base branch instead of always from the trunk.
+    const baseOf = new Map((branchForks || []).map(f => [f.branch, f.base]));
+
+    DOM.gitTreeContainer.innerHTML = '';
+    const hashQueue = [];
+    const gitgraph = GitgraphJS.createGitgraph(DOM.gitTreeContainer, {
+      orientation: GitgraphJS.Orientation.Horizontal,
+      generateCommitHash: () => hashQueue.shift(),
+      template: GitgraphJS.templateExtend(GitgraphJS.TemplateName.Metro, { colors: LANE_COLORS })
+    });
+
+    const branchApis = new Map();
+    function branchApiFor(name) {
+      if (branchApis.has(name)) return branchApis.get(name);
+      const base = baseOf.get(name);
+      const parentApi = (base && branchApis.has(base)) ? branchApis.get(base) : gitgraph;
+      const api = parentApi.branch(name);
+      branchApis.set(name, api);
+      return api;
+    }
+
+    nodes.forEach(node => {
+      const api = branchApiFor(node.branch);
+      const commitOptions = {
+        subject: node.message || node.sha,
+        author: node.author || '',
+        onClick: () => openCommitModal(node.sha, node.message, node.author, node.branch)
+      };
+      // A merge commit's non-mainline parent tells us which branch got merged in —
+      // only draw it as a merge if that parent is one of our own known commits.
+      const otherParent = (node.parents || [])
+        .map(sha => nodeBySha.get(sha))
+        .find(p => p && p.branch !== node.branch);
+
+      hashQueue.push(node.sha);
+      if (otherParent) {
+        api.merge({ branch: branchApiFor(otherParent.branch), commitOptions });
+      } else {
+        api.commit(commitOptions);
+      }
+    });
+
+    // gitgraph.js pins every branch-tip label at the same fixed offset from its own
+    // commit row (translate(x, 38)), so labels whose tips land close together in time
+    // collide. Stagger them above/below in alternating order, sorted by tip position,
+    // so neighbors don't overlap. Deferred a tick since gitgraph.js hasn't painted its
+    // SVG yet in the same synchronous pass that creates it — plain setTimeout, not rAF,
+    // since this dashboard can render in a backgrounded/non-composited tab where rAF
+    // callbacks never fire.
+    const labelX = (g) => parseFloat(g.getAttribute('transform').match(/-?[\d.]+/)[0]);
+    setTimeout(() => {
+      const labelGroups = Array.from(DOM.gitTreeContainer.querySelectorAll('g'))
+        .filter(g => /^translate\(-?[\d.]+,\s*38\)$/.test(g.getAttribute('transform') || ''))
+        .sort((a, b) => labelX(a) - labelX(b));
+      labelGroups.forEach((g, i) => {
+        g.setAttribute('transform', `translate(${labelX(g)}, ${i % 2 === 0 ? -34 : 58})`);
+      });
+    }, 0);
 
     // Render Timeline Items (Linear Row Matrix with Click Handlers)
     DOM.commitTimelineList.innerHTML = treeNodes.map(node => `

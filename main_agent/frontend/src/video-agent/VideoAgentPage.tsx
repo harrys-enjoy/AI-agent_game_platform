@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ComposerTabs } from "./ComposerTabs";
 import { FormComposer } from "./FormComposer";
-import { StatusBadge } from "./StatusBadge";
+import { StatusBadge, TERMINAL_STATES } from "./StatusBadge";
 import { TaskCanvas } from "./TaskCanvas";
 import { VeoUsageBadge } from "./VeoUsageBadge";
 import { VideoGallery } from "./VideoGallery";
@@ -38,6 +38,13 @@ export function VideoAgentPage({ initialBrief, owner, onRouteAway }: { initialBr
   useEffect(() => {
     if (notFound) window.localStorage.removeItem(STORAGE_KEY);
   }, [notFound]);
+
+  useEffect(() => {
+    // 완료/실패 등 종료 상태에 도달한 태스크를 계속 "진행 중"으로 남겨두면, 나중에
+    // 페이지를 새로고침할 때 그 오래된 startedAt이 되살아나 실제 소요 시간이 아니라
+    // 제출 후 지난 실제 시간(예: 79760s)이 그대로 표시된다 - 끝난 태스크는 지운다.
+    if (task && TERMINAL_STATES.includes(task.status.state)) window.localStorage.removeItem(STORAGE_KEY);
+  }, [task?.status.state]);
 
   useEffect(() => {
     if (task?.status.state === "TASK_STATE_INPUT_REQUIRED" && task.status.unresolvedScenes) {

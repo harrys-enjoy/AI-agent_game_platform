@@ -12,7 +12,7 @@ export const LABELS: Record<TaskState, string> = {
   TASK_STATE_REJECTED: "거부됨",
 };
 
-const TERMINAL_STATES: TaskState[] = ["TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_REJECTED"];
+export const TERMINAL_STATES: TaskState[] = ["TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_REJECTED"];
 
 const DOT_COLORS: Record<TaskState, string> = {
   TASK_STATE_SUBMITTED: "text-brief-accent",

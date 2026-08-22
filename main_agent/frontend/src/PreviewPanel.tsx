@@ -147,7 +147,7 @@ export default function PreviewPanel({ isGameQa, currentChat, recentGameQnaWork,
     </section>}
     {activeChat === "Development Assistant" && <section className="preview-panel is-open">
       <div className="preview-header"><div><span className="preview-kicker">DEV AGENT</span><h2>GitHub Dashboard</h2></div></div>
-      <div className="preview-body"><iframe src={DEV_AGENT_DASHBOARD_URL} title="dev-agent GitHub dashboard" style={{ width: "100%", height: "70vh", border: 0, borderRadius: 8 }} /></div>
+      <div className="preview-body"><iframe src={DEV_AGENT_DASHBOARD_URL} title="dev-agent GitHub dashboard" style={{ width: "100%", height: "calc(100vh - 160px)", border: 0, borderRadius: 8 }} /></div>
     </section>}
     {showStoryWorkspace && <section className="story-workspace" aria-label="Game Q&A story workspace">
       <div className="story-workspace-header"><div><span className="preview-kicker">ADD STORY</span><h2>Story Review Workspace</h2></div><label className="file-button">Upload TXT<input type="file" accept=".txt,text/plain" onChange={(event) => void handleStoryTxt(event)} /></label></div>
