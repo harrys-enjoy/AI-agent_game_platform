@@ -81,6 +81,12 @@ function rebuildChatFromHistory(messages: StoredMessage[], chatName: string): Ch
 const PENDING_ACTION_CONFIRM_WORDS = new Set(["응", "네", "넵", "예", "확인", "좋아", "오케이", "ok", "okay", "yes", "y"]);
 const PENDING_ACTION_CANCEL_WORDS = new Set(["아니", "아니요", "아니오", "취소", "no", "n"]);
 
+function readableErrorDetail(detail: unknown): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") return detail.message;
+  return "담당 Agent 요청을 처리하지 못했습니다. 다시 시도해 주세요.";
+}
+
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [message, setMessage] = useState("");
@@ -469,8 +475,8 @@ export default function App() {
       if (!response.ok) {
         let detail = `Agent reply failed (${response.status})`;
         try {
-          const errorData = await response.json() as { detail?: string };
-          if (errorData.detail) detail = errorData.detail;
+          const errorData = await response.json() as { detail?: unknown };
+          if (errorData.detail) detail = readableErrorDetail(errorData.detail);
         } catch {
           // Keep the HTTP status when the server does not return JSON.
         }
