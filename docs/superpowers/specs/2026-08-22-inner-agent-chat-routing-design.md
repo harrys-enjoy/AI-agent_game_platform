@@ -31,7 +31,7 @@ Workmate AI, Video Generation, Development Assistant, Game Q&A의 어느 내부 
 
 ### 응답
 
-일반 성공 응답에는 기존 `answer`, `agent`, `status`, `pending_action` 필드를 유지한다. 프론트엔드는 `agent`가 입력 Chat과 다를 경우, 현재 Chat에 답변을 유지하면서 `Workmate AI가 처리함`처럼 실제 담당 Agent를 표시한다. 자동 탭 전환은 하지 않는다.
+일반 성공 응답에는 기존 `answer`, `agent`, `status`, `pending_action` 필드를 유지한다. 프론트엔드는 `agent`가 입력 Chat과 다를 경우 실제 담당 Agent의 내부 Chat으로 자동 전환하고, `Game Q&A에서 전달됨`처럼 전달 출처를 표시한다. 원래 요청과 응답은 대상 Agent의 대화 기록으로 함께 저장해, 전환 후에도 대화 맥락이 이어진다.
 
 ## Task 및 Workmate 보호 경계
 
@@ -65,5 +65,5 @@ Workmate가 `pending_action`을 반환하면 현재의 확인 카드 및 재전�
 3. `회의 일정 추가해줘`는 Project Task 제안을 표시하지 않는다.
 4. `Task로 추가해줘`는 기존 Project Task 확인 흐름을 유지한다.
 5. 모호한 요청은 Agent 선택 카드만 표시하며 전문 Agent를 호출하지 않는다.
-6. 자동 전달된 성공 응답은 원래 Chat에 표시되고 실제 담당 Agent가 표시된다.
+6. 자동 전달된 성공 응답은 실제 담당 Agent의 Chat으로 화면이 전환되고, 전달 출처와 함께 표시된다.
 7. Workmate Agent의 소스·API·DB 마이그레이션 파일은 변경하지 않는다.
