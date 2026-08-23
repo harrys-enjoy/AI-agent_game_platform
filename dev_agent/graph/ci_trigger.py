@@ -6,6 +6,7 @@ fetch 노드가 '이미 끝난' 체크 결과를 수동적으로 읽는 것과 �
 """
 
 import os
+import re
 import time
 
 from github import Github
@@ -20,13 +21,32 @@ def _timeout_sec() -> int:
     return int(os.getenv("CI_TRIGGER_TIMEOUT_SEC", DEFAULT_TIMEOUT_SEC))
 
 
+def _find_mentioned_branch(request: str, branches: list) -> str | None:
+    """요청 텍스트에 실제 브랜치 이름이 단어 경계로 등장하면 그 이름을 돌려준다.
+
+    긴 이름부터 검사해서 "feat"과 "feat/x"가 둘 다 존재할 때 더 구체적인 쪽을
+    우선한다. 단순 substring 검사면 "main"이 "main_agent" 안에서 오탐된다 — 이
+    모노레포 자체에 그런 디렉터리가 있어 실제로 위험한 케이스다. 앞뒤가 단어
+    문자(영숫자/밑줄)나 "/", "-"가 아닐 때만 진짜 매치로 인정한다.
+    """
+    for branch in sorted(branches, key=len, reverse=True):
+        pattern = r"(?<![\w/-])" + re.escape(branch) + r"(?![\w/-])"
+        if re.search(pattern, request):
+            return branch
+    return None
+
+
 def _resolve_ref(state: dict, repo) -> str:
-    """실행할 브랜치를 정한다. PR 번호가 주어졌으면 그 PR의 브랜치, 아니면 레포 기본 브랜치."""
+    """실행할 브랜치를 정한다. PR 번호가 주어졌으면 그 PR의 브랜치, 아니면 요청 텍스트에
+    실제 브랜치 이름이 언급됐으면 그 브랜치, 그것도 아니면 레포 기본 브랜치."""
     pr_number = state.get("pr_number")
     if pr_number:
         for pr in state.get("prs", []):
             if pr.get("number") == pr_number and pr.get("branch"):
                 return pr["branch"]
+    mentioned = _find_mentioned_branch(state.get("request", ""), state.get("branches", []))
+    if mentioned:
+        return mentioned
     return repo.default_branch
 
 
