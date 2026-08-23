@@ -520,6 +520,38 @@ def test_deploy_trigger_node_keeps_bare_slot_when_default_branch_mentioned():
     assert captured["build_tag"] == _slot_name("owner/repo-a")
 
 
+def test_deploy_trigger_node_uses_branch_specific_slot_for_pr_driven_deploy():
+    """PR-number-driven deploys land in a branch-suffixed slot too, same as an
+    explicitly-named branch — pinning this so it's a deliberate, tested behavior
+    rather than a silent side effect of _resolve_ref's PR-branch priority."""
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            captured["clone_branch"] = cmd[cmd.index("--branch") + 1]
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {
+            "repo": "owner/repo-a",
+            "pr_number": 42,
+            "prs": [{"number": 42, "branch": "demo/bug-1"}],
+        },
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["clone_branch"] == "demo/bug-1"
+    assert captured["build_tag"] == _slot_name("owner/repo-a", "demo/bug-1", "beta")
+
+
 def test_find_compose_file_detects_docker_compose_yml(tmp_path):
     (tmp_path / "docker-compose.yml").write_text("services: {}")
 

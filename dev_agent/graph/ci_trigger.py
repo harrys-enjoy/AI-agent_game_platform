@@ -16,21 +16,28 @@ from graph.fetch import get_github_client
 WORKFLOW_FILE = "tests.yml"
 POLL_INTERVAL_SEC = 10
 DEFAULT_TIMEOUT_SEC = 600
+# Python의 \w는 유니코드 인식이라 한글도 "단어 문자"로 쳐서 "feat/x를"처럼 조사가
+# 브랜치명에 바로 붙는(공백 없는) 가장 흔한 한국어 표현을 못 잡는다. 그래서 경계
+# 문자 클래스를 ASCII로 제한한다 — "." 도 경계에 포함해 "main.py" 같은 파일명
+# 안의 오탐도 막는다(원래 계획엔 없었지만 같은 문제라 같이 닫는다).
+_BOUNDARY = r"[A-Za-z0-9_/.-]"
 
 def _timeout_sec() -> int:
     return int(os.getenv("CI_TRIGGER_TIMEOUT_SEC", DEFAULT_TIMEOUT_SEC))
 
 
-def _find_mentioned_branch(request: str, branches: list) -> str | None:
+def _find_mentioned_branch(request: str, branches: list[str]) -> str | None:
     """요청 텍스트에 실제 브랜치 이름이 단어 경계로 등장하면 그 이름을 돌려준다.
 
     긴 이름부터 검사해서 "feat"과 "feat/x"가 둘 다 존재할 때 더 구체적인 쪽을
     우선한다. 단순 substring 검사면 "main"이 "main_agent" 안에서 오탐된다 — 이
-    모노레포 자체에 그런 디렉터리가 있어 실제로 위험한 케이스다. 앞뒤가 단어
-    문자(영숫자/밑줄)나 "/", "-"가 아닐 때만 진짜 매치로 인정한다.
+    모노레포 자체에 그런 디렉터리가 있어 실제로 위험한 케이스다. 앞뒤가
+    ASCII 단어 문자(영숫자/밑줄)나 "/", ".", "-"가 아닐 때만 진짜 매치로
+    인정한다. \\w를 그대로 쓰면 유니코드 인식이라 한글 조사가 브랜치명에 바로
+    붙는 표현("feat/x를 배포해줘")을 못 잡으므로 _BOUNDARY로 ASCII만 경계로 친다.
     """
     for branch in sorted(branches, key=len, reverse=True):
-        pattern = r"(?<![\w/-])" + re.escape(branch) + r"(?![\w/-])"
+        pattern = rf"(?<!{_BOUNDARY}){re.escape(branch)}(?!{_BOUNDARY})"
         if re.search(pattern, request):
             return branch
     return None
@@ -44,7 +51,7 @@ def _resolve_ref(state: dict, repo) -> str:
         for pr in state.get("prs", []):
             if pr.get("number") == pr_number and pr.get("branch"):
                 return pr["branch"]
-    mentioned = _find_mentioned_branch(state.get("request", ""), state.get("branches", []))
+    mentioned = _find_mentioned_branch(state.get("request") or "", state.get("branches") or [])
     if mentioned:
         return mentioned
     return repo.default_branch

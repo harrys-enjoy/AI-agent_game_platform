@@ -69,6 +69,16 @@ def test_find_mentioned_branch_returns_none_when_nothing_matches():
     assert _find_mentioned_branch("아무 브랜치도 언급 안 함", ["main", "feat/x"]) is None
 
 
+def test_find_mentioned_branch_matches_without_space_before_korean_particle():
+    # 실제로 가장 흔한 표현 — "feat/x를 배포해줘"처럼 조사가 브랜치명에 바로 붙는다.
+    assert _find_mentioned_branch("feat/x를 배포해줘", ["beta", "feat/x"]) == "feat/x"
+
+
+def test_find_mentioned_branch_ignores_substring_inside_dotted_filename():
+    # "main"이 "main.py" 안에서 오탐되면 안 된다 — "." 도 경계로 취급해야 한다.
+    assert _find_mentioned_branch("main.py 파일 좀 보여줘", ["main"]) is None
+
+
 def test_resolve_ref_uses_mentioned_branch_when_no_pr_number():
     state = {"pr_number": None, "prs": [], "request": "feat/x 배포해줘", "branches": ["beta", "feat/x"]}
     assert _resolve_ref(state, FakeRepo()) == "feat/x"
