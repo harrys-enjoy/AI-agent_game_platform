@@ -99,6 +99,7 @@ def test_build_input_includes_style_guide_fields_when_present():
         storyboard=Storyboard(
             camera="pan", subject="a knight", action="draws sword", setting="castle",
             visual_style="3D cinematic render", color_palette="teal and orange",
+            secondary_subject="a colossal kraken",
         ),
     )
 
@@ -106,12 +107,27 @@ def test_build_input_includes_style_guide_fields_when_present():
 
     assert "3D cinematic render" in text
     assert "teal and orange" in text
+    assert "a colossal kraken" in text
 
 
 def test_build_input_shows_unspecified_when_style_guide_fields_empty():
     text = _build_input(_scene())
 
     assert "unspecified" in text
+
+
+def test_build_input_shows_none_when_secondary_subject_absent():
+    text = _build_input(_scene())
+
+    assert "Secondary subject: none" in text
+
+
+def test_build_input_instructs_secondary_subject_consistency_when_present():
+    text = _build_input(_scene())
+
+    assert "Secondary subject" in text
+    assert "do not invent a different look for it" in text.lower()
+    assert "do not introduce a second recurring character" in text.lower()
 
 
 def test_build_input_instructs_pov_shots_to_hide_subject_face_and_body():

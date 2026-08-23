@@ -81,7 +81,10 @@ def test_build_input_includes_style_guide_when_present():
     narrative = Narrative(
         beats=[Beat(beat_id="setup", description="평화로운 상황", tone="calm")],
         style_guide=StyleGuide(
-            visual_style="3D cinematic render", color_palette="teal and orange", subject_blueprint="a knight"
+            visual_style="3D cinematic render",
+            color_palette="teal and orange",
+            subject_blueprint="a knight",
+            secondary_subject_blueprint="a colossal kraken",
         ),
     )
     project_input = ProjectInput(preset="이벤트", scene_type="스튜디오", duration_sec=20, brief="할로윈 이벤트")
@@ -91,6 +94,19 @@ def test_build_input_includes_style_guide_when_present():
     assert "3D cinematic render" in text
     assert "teal and orange" in text
     assert "a knight" in text
+    assert "a colossal kraken" in text
+
+
+def test_build_input_shows_none_when_secondary_subject_absent():
+    narrative = Narrative(
+        beats=[Beat(beat_id="setup", description="평화로운 상황", tone="calm")],
+        style_guide=StyleGuide(subject_blueprint="a knight"),
+    )
+    project_input = ProjectInput(preset="이벤트", scene_type="스튜디오", duration_sec=20, brief="할로윈 이벤트")
+
+    text = _build_input(narrative, project_input)
+
+    assert "Secondary subject: none" in text
 
 
 def test_build_input_shows_unspecified_when_style_guide_empty():
@@ -159,6 +175,27 @@ def test_drafts_to_scenes_uses_subject_blueprint_verbatim_on_every_scene():
     scenes = _drafts_to_scenes(drafts, project_input, style_guide)
 
     assert all(s.storyboard.subject == "the exact same knight in every scene" for s in scenes)
+
+
+def test_drafts_to_scenes_uses_secondary_subject_blueprint_verbatim_on_every_scene():
+    drafts = [_draft("setup", 1), _draft("conflict", 1), _draft("resolution", 1)]
+    project_input = ProjectInput(preset="공개", scene_type="인게임", duration_sec=10, brief="브리프")
+    style_guide = StyleGuide(secondary_subject_blueprint="a colossal kraken with teardrop-shaped red eyes")
+
+    scenes = _drafts_to_scenes(drafts, project_input, style_guide)
+
+    assert all(
+        s.storyboard.secondary_subject == "a colossal kraken with teardrop-shaped red eyes" for s in scenes
+    )
+
+
+def test_drafts_to_scenes_defaults_secondary_subject_to_empty_when_absent():
+    drafts = [_draft("setup", 1)]
+    project_input = ProjectInput(preset="공개", scene_type="인게임", duration_sec=10, brief="브리프")
+
+    scenes = _drafts_to_scenes(drafts, project_input, StyleGuide())
+
+    assert scenes[0].storyboard.secondary_subject == ""
 
 
 def test_drafts_to_scenes_falls_back_to_draft_subject_when_blueprint_empty():
@@ -254,6 +291,23 @@ def test_run_threads_style_guide_subject_onto_every_scene(monkeypatch):
     scenes = agent.run(narrative, project_input)
 
     assert all(s.storyboard.subject == "the exact same knight in every scene" for s in scenes)
+
+
+def test_run_threads_secondary_subject_blueprint_onto_every_scene(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "env-key")
+    narrative = _narrative_four_beats()
+    narrative.style_guide = StyleGuide(secondary_subject_blueprint="the exact same kraken in every scene")
+    draft = StoryboardDraft(
+        scenes=[_draft("setup", 1), _draft("conflict", 1), _draft("climax", 1), _draft("resolution", 1)]
+    )
+    client = MagicMock()
+    client.interactions.create.return_value = _fake_interaction(draft.model_dump_json())
+    agent = GeminiStoryboardAgent(client=client)
+    project_input = ProjectInput(preset="공개", scene_type="인게임", duration_sec=30, brief="브리프")
+
+    scenes = agent.run(narrative, project_input)
+
+    assert all(s.storyboard.secondary_subject == "the exact same kraken in every scene" for s in scenes)
 
 
 def test_run_calls_sdk_with_expected_model_and_input(monkeypatch):

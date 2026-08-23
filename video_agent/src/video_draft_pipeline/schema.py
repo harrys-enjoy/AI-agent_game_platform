@@ -30,6 +30,7 @@ class StyleGuide(BaseModel):
     visual_style: str = ""
     color_palette: str = ""
     subject_blueprint: str = ""
+    secondary_subject_blueprint: str = ""
 
 
 class Narrative(BaseModel):
@@ -44,6 +45,7 @@ class Storyboard(BaseModel):
     setting: str
     visual_style: str = ""
     color_palette: str = ""
+    secondary_subject: str = ""
     required_elements: list[str] = Field(default_factory=list)
 
 

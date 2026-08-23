@@ -114,12 +114,17 @@ def test_project_rejects_wrong_type_on_assignment():
 def test_narrative_style_guide_defaults_to_empty_strings():
     narrative = Narrative(beats=[Beat(beat_id="setup", description="d", tone="calm")])
 
-    assert narrative.style_guide == StyleGuide(visual_style="", color_palette="", subject_blueprint="")
+    assert narrative.style_guide == StyleGuide(
+        visual_style="", color_palette="", subject_blueprint="", secondary_subject_blueprint=""
+    )
 
 
 def test_narrative_accepts_explicit_style_guide():
     style_guide = StyleGuide(
-        visual_style="3D cinematic render", color_palette="teal and orange", subject_blueprint="a knight"
+        visual_style="3D cinematic render",
+        color_palette="teal and orange",
+        subject_blueprint="a knight",
+        secondary_subject_blueprint="a colossal kraken with teardrop-shaped glowing red eyes",
     )
 
     narrative = Narrative(
@@ -134,3 +139,9 @@ def test_storyboard_visual_style_and_color_palette_default_to_empty_strings():
 
     assert storyboard.visual_style == ""
     assert storyboard.color_palette == ""
+
+
+def test_storyboard_secondary_subject_defaults_to_empty_string():
+    storyboard = Storyboard(camera="pan", subject="boss", action="appears", setting="castle")
+
+    assert storyboard.secondary_subject == ""
