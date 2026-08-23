@@ -506,6 +506,24 @@ async def delete_docker_deployment(name: str) -> None:
     if running == "true":
         raise HTTPException(status_code=409, detail="실행 중인 컨테이너는 삭제할 수 없습니다.")
 
+    if project:
+        # 클릭한 컨테이너 자신은 STOPPED라도, 같은 compose 프로젝트의 다른 컨테이너가
+        # 아직 RUNNING이면 `down`이 그것까지 같이 내려버린다 — 실제로 겪음(mysql은
+        # 살아있고 app만 죽었는데, app을 지우려다 mysql까지 같이 삭제됨). 프로젝트
+        # 전체를 내리기 전에 살아있는 형제가 있는지 먼저 확인한다.
+        try:
+            siblings = await asyncio.to_thread(
+                _run_docker,
+                ["ps", "--filter", f"label=com.docker.compose.project={project}", "--format", "{{.Names}}"],
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise HTTPException(status_code=502, detail=f"같은 배포의 다른 컨테이너 상태를 확인하지 못했습니다: {e}")
+        if siblings.returncode == 0 and siblings.stdout.strip():
+            raise HTTPException(
+                status_code=409,
+                detail="같은 배포의 다른 컨테이너가 아직 실행 중입니다 — 그것부터 정리해주세요.",
+            )
+
     args = ["compose", "-p", project, "down"] if project else ["rm", name]
     try:
         result = await asyncio.to_thread(_run_docker, args)

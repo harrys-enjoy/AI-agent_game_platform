@@ -78,6 +78,8 @@ def test_delete_removes_whole_compose_project_when_label_present(client, monkeyp
         calls.append(args)
         if args[0] == "inspect":
             return FakeCompleted(stdout="false\tkosa-deploy-owner-repo\n")
+        if args[0] == "ps":
+            return FakeCompleted(stdout="")  # no siblings still running
         return FakeCompleted(returncode=0)
 
     monkeypatch.setattr(kosa_main, "_run_docker", fake_run_docker)
@@ -85,7 +87,31 @@ def test_delete_removes_whole_compose_project_when_label_present(client, monkeyp
     res = client.delete("/api/deployments/kosa-deploy-owner-repo-mysql-1")
 
     assert res.status_code == 200
-    assert calls[1] == ["compose", "-p", "kosa-deploy-owner-repo", "down"]
+    assert calls[1] == ["ps", "--filter", "label=com.docker.compose.project=kosa-deploy-owner-repo", "--format", "{{.Names}}"]
+    assert calls[2] == ["compose", "-p", "kosa-deploy-owner-repo", "down"]
+
+
+def test_delete_rejects_when_compose_sibling_still_running(client, monkeypatch):
+    """Clicked container is STOPPED, but a sibling in the same compose project is still
+    RUNNING — `down` would take that sibling out too, which breaks the STOPPED-only
+    guarantee. Caught during manual browser verification (2026-08-23): deleting a
+    crashed `app` container silently killed the still-running `mysql` sibling."""
+    calls = []
+
+    def fake_run_docker(args):
+        calls.append(args)
+        if args[0] == "inspect":
+            return FakeCompleted(stdout="false\tkosa-deploy-owner-repo\n")
+        if args[0] == "ps":
+            return FakeCompleted(stdout="kosa-deploy-owner-repo-mysql-1\n")
+        return FakeCompleted(returncode=0)
+
+    monkeypatch.setattr(kosa_main, "_run_docker", fake_run_docker)
+
+    res = client.delete("/api/deployments/kosa-deploy-owner-repo-app-1")
+
+    assert res.status_code == 409
+    assert not any(c[0] == "compose" for c in calls)  # never actually tears anything down
 
 
 def test_delete_returns_500_when_removal_fails(client, monkeypatch):
