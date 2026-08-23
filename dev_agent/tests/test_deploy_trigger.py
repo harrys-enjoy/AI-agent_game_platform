@@ -406,6 +406,18 @@ def test_slot_name_differs_per_repo():
     assert _slot_name("owner/repo-a") != _slot_name("owner/repo-b")
 
 
+def test_slot_name_appends_branch_when_not_default():
+    assert _slot_name("owner/repo", "feat/x", "main") == "kosa-deploy-owner-repo-feat-x"
+
+
+def test_slot_name_omits_branch_when_it_equals_default():
+    assert _slot_name("owner/repo", "main", "main") == "kosa-deploy-owner-repo"
+
+
+def test_slot_name_omits_branch_when_not_provided():
+    assert _slot_name("owner/repo") == "kosa-deploy-owner-repo"
+
+
 def test_deploy_trigger_node_uses_repo_specific_slot():
     captured = {}
 
@@ -457,6 +469,55 @@ def test_deploy_trigger_node_uses_different_slot_for_different_repo():
 
     assert captured["build_tag"] == _slot_name("owner/repo-b")
     assert captured["build_tag"] != _slot_name("owner/repo-a")
+
+
+def test_deploy_trigger_node_uses_branch_specific_slot_when_branch_mentioned():
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            captured["clone_branch"] = cmd[cmd.index("--branch") + 1]
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {"repo": "owner/repo-a", "request": "feat/x 브랜치로 배포해줘", "branches": ["beta", "feat/x"]},
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["clone_branch"] == "feat/x"
+    assert captured["build_tag"] == _slot_name("owner/repo-a", "feat/x", "beta")
+    assert captured["build_tag"] != _slot_name("owner/repo-a")  # default-branch slot untouched
+
+
+def test_deploy_trigger_node_keeps_bare_slot_when_default_branch_mentioned():
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {"repo": "owner/repo-a", "request": "beta 브랜치 배포해줘", "branches": ["beta", "feat/x"]},
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["build_tag"] == _slot_name("owner/repo-a")
 
 
 def test_find_compose_file_detects_docker_compose_yml(tmp_path):

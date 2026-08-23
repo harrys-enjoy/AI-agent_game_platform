@@ -114,14 +114,20 @@ def _tail(text: str, n: int) -> str:
     return "\n".join(lines[-n:])
 
 
-def _slot_name(repo: str) -> str:
-    """레포별로 겹치지 않는 컨테이너/이미지 이름을 만든다.
+def _slot_name(repo: str, branch: str | None = None, default_branch: str | None = None) -> str:
+    """레포별로(그리고 기본 브랜치가 아닌 브랜치를 지정했다면 브랜치별로도) 겹치지 않는
+    컨테이너/이미지 이름을 만든다.
 
     "owner/name" 형태의 "/"는 Docker 이름에 못 쓰므로 치환하고, 이미지 태그는
-    소문자만 허용되므로 소문자로 통일한다.
+    소문자만 허용되므로 소문자로 통일한다. 기본 브랜치 배포는 지금까지처럼 브랜치를
+    슬롯 이름에 안 붙인다 — 그래야 기존에 떠 있는 배포/삭제 기능과 호환된다. 다른
+    브랜치를 명시했을 때만 같은 레포를 나란히 배포할 수 있도록 슬롯을 분리한다.
     """
-    safe = _UNSAFE_SLOT_CHARS.sub("-", repo.lower())
-    return f"{_SLOT_PREFIX}-{safe}"
+    safe_repo = _UNSAFE_SLOT_CHARS.sub("-", repo.lower())
+    if branch and branch != default_branch:
+        safe_branch = _UNSAFE_SLOT_CHARS.sub("-", branch.lower())
+        return f"{_SLOT_PREFIX}-{safe_repo}-{safe_branch}"
+    return f"{_SLOT_PREFIX}-{safe_repo}"
 
 
 def _find_free_port(port_range: range = PORT_RANGE) -> int | None:
@@ -334,13 +340,13 @@ def deploy_trigger_node(
             }
         }
 
-    slot = _slot_name(state["repo"])
     clone_dir = _clone_dir(worker)
 
     try:
         gh = gh_client or get_github_client()
         repo = gh.get_repo(state["repo"])
         ref = _resolve_ref(state, repo)
+        slot = _slot_name(state["repo"], ref, repo.default_branch)
 
         clone_error = _clone_repo(state["repo"], ref, run, clone_dir)
         if clone_error is not None:
