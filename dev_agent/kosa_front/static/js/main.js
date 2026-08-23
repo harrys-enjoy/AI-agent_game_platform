@@ -616,8 +616,20 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="metric-bar-group">
           <div class="metric-label"><span>Memory 사용량</span><span>${escapeHtml(c.memory_usage || '-')}</span></div>
         </div>
+
+        ${!c.running ? `
+        <button class="btn btn-secondary btn-delete-deploy" data-container-name="${escapeHtml(c.name)}" style="margin-top: 0.75rem; width: 100%;">
+          <i class="fa-solid fa-trash"></i> 삭제
+        </button>` : ''}
       </div>
     `).join('');
+
+    // .btn-delete-deploy exists in both renderContainerCards and renderContainerList's
+    // output — scope the wiring to this grid's own root so it doesn't also pick up (and
+    // double-wire) the history list's buttons when both renders run back-to-back.
+    DOM.envCardsGrid.querySelectorAll('.btn-delete-deploy').forEach(btn => {
+      btn.addEventListener('click', () => void deleteDeployment(btn.getAttribute('data-container-name')));
+    });
   }
 
   function renderContainerList(containers, dockerAvailable, errorMsg) {
@@ -645,9 +657,15 @@ document.addEventListener('DOMContentLoaded', () => {
           <div style="font-size: 0.75rem; color: var(--text-muted); font-family: 'Fira Code', monospace;">
             ${escapeHtml(c.ports || '포트 없음')} • ${escapeHtml(c.created_at)}
           </div>
-          <button class="btn btn-secondary btn-view-log" data-container-name="${escapeHtml(c.name)}">
-            <i class="fa-solid fa-terminal"></i> 로그 보기
-          </button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-view-log" data-container-name="${escapeHtml(c.name)}">
+              <i class="fa-solid fa-terminal"></i> 로그 보기
+            </button>
+            ${!c.running ? `
+            <button class="btn btn-secondary btn-delete-deploy" data-container-name="${escapeHtml(c.name)}">
+              <i class="fa-solid fa-trash"></i> 삭제
+            </button>` : ''}
+          </div>
         </div>
       </div>
     `).join('');
@@ -657,6 +675,25 @@ document.addEventListener('DOMContentLoaded', () => {
         openTerminalLogModal(btn.getAttribute('data-container-name'));
       });
     });
+
+    // Scoped to this list's own root — see the matching comment in renderContainerCards.
+    DOM.deployHistoryList.querySelectorAll('.btn-delete-deploy').forEach(btn => {
+      btn.addEventListener('click', () => void deleteDeployment(btn.getAttribute('data-container-name')));
+    });
+  }
+
+  async function deleteDeployment(containerName) {
+    try {
+      const res = await fetch(`/api/deployments/${encodeURIComponent(containerName)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`삭제하지 못했습니다: ${err.detail || res.statusText}`);
+        return;
+      }
+      await fetchDeployments();
+    } catch (err) {
+      alert(`삭제하지 못했습니다: ${err.message}`);
+    }
   }
 
   async function openTerminalLogModal(containerName) {
