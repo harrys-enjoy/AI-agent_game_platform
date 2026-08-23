@@ -90,6 +90,18 @@ def test_build_input_requests_style_guide_fields():
     assert "verbatim" in text
 
 
+def test_build_input_requests_optional_secondary_subject_blueprint():
+    project_input = ProjectInput(
+        preset="이벤트", scene_type="스튜디오", duration_sec=10, brief="브리프"
+    )
+
+    text = _build_input(project_input)
+
+    assert "secondary_subject_blueprint" in text
+    assert "second recurring visual subject" in text
+    assert "leave it empty" in text
+
+
 def test_build_input_forbids_naming_physical_effects_in_color_palette():
     project_input = ProjectInput(
         preset="이벤트", scene_type="스튜디오", duration_sec=10, brief="브리프"
@@ -135,7 +147,10 @@ def test_run_returns_parsed_style_guide(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "env-key")
     narrative = _narrative()
     narrative.style_guide = StyleGuide(
-        visual_style="3D cinematic render", color_palette="teal and orange", subject_blueprint="a knight"
+        visual_style="3D cinematic render",
+        color_palette="teal and orange",
+        subject_blueprint="a knight",
+        secondary_subject_blueprint="a dragon",
     )
     client = MagicMock()
     client.interactions.create.return_value = _fake_interaction(narrative.model_dump_json())

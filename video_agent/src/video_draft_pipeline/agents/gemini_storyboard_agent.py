@@ -22,7 +22,8 @@ def _build_input(narrative: Narrative, project_input: ProjectInput) -> str:
         "low-poly art style shouldn't call for photorealistic lighting):\n"
         f"- Visual style: {sg.visual_style or 'unspecified'}\n"
         f"- Color palette: {sg.color_palette or 'unspecified'}\n"
-        f"- Subject: {sg.subject_blueprint or 'unspecified'}\n\n"
+        f"- Subject: {sg.subject_blueprint or 'unspecified'}\n"
+        f"- Secondary subject: {sg.secondary_subject_blueprint or 'none'}\n\n"
         f"Preset: {project_input.preset}\n"
         f"Scene type: {project_input.scene_type}\n"
         f"Brief: {project_input.brief}\n"
@@ -68,6 +69,7 @@ def _drafts_to_scenes(
                     setting=draft.setting,
                     visual_style=style_guide.visual_style,
                     color_palette=style_guide.color_palette,
+                    secondary_subject=style_guide.secondary_subject_blueprint,
                     required_elements=required_elements,
                 ),
             )
