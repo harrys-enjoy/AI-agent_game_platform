@@ -37,9 +37,11 @@ Docker 내부 통신은 서비스 네트워크에서 HTTP를 사용합니다. �
 | Agent | 환경변수 | Docker 서비스명 | Port | 환경변수 값 | 상태 |
 | --- | --- | --- | --- | --- | --- |
 | 업무지원 | `WORKMATE_AGENT_URL` | `workmate-agent` | `8001` | `http://workmate-agent:8001/a2a` | 실제 Agent |
-| 영상 생성 | `VIDEO_AGENT_URL` | `video-agent` | `8002` | `http://video-agent:8002/a2a` | Mock |
+| 영상 생성 | `VIDEO_AGENT_URL` | `video-agent` | `8002` | `http://video-agent:8002/a2a` | 실제 Agent |
 | 개발 보조 | `DEV_AGENT_URL` | `dev-agent` | `8003` | `http://dev-agent:8003/a2a` | Mock |
 | 게임 Q&A | `GAME_QNA_AGENT_URL` | `game-qa-agent` | `3000` | `http://game-qa-agent:3000/message:send` | Catalog 연결 |
+
+`video-agent`는 Gemini 기반 7단계 에이전트(기획~프롬프트~이미지 검수) + 실제 Veo/LTX 렌더 백엔드 + `ffmpeg` 합본까지 전 구간이 실제로 동작한다 (`../video_agent`, 자세한 내용은 그 저장소의 README 참고). `VIDEO_SERVICE_TOKEN` Bearer 인증 + `A2A-Version: 1.0` 헤더가 모든 `/a2a/*` 요청에 필요하다.
 
 모든 주소는 Orchestrator에 환경변수로 주입합니다. Main은 환경변수에서 Endpoint 주소를 읽고, Agent Card를 조회할 때 필요한 경우 `/a2a` 또는 `/message:send`를 제거해 Base URL을 계산합니다.
 
@@ -63,6 +65,10 @@ services:
 ```
 
 토큰은 서버 컨테이너에서만 사용합니다. 기존 환경과의 호환을 위해 `*_AGENT_TOKEN`도 fallback으로 지원하지만, 신규 설정에서는 `*_SERVICE_TOKEN`을 사용합니다.
+
+`LIVE_AGENT_DISCOVERY=true`일 때 Main은 매 요청마다 `AGENT_REGISTRY`에 나열된 Agent 이름(예: `workmate-agent,video-agent,dev-agent,game-qna-agent`)의 Agent Card를 실시간으로 다시 조회합니다(`registry.refresh()`). 꺼져 있으면 최초 기동 시 조회한 Agent Card만 사용합니다.
+
+채팅 라우팅(어느 사용자 메시지를 어느 Sub-agent로 보낼지 판단)은 기본적으로 규칙 기반이며, `ROUTER_LLM_ENABLED=true`로 켜면 `ROUTER_MODEL_NAME`/`ROUTER_BASE_URL`/`ROUTER_API_KEY`(기본 `https://integrate.api.nvidia.com/v1`)로 지정한 LLM이 라우팅 판단에 추가로 관여합니다(`ROUTER_TIMEOUT_SECONDS`, 기본 `8`초). 셋 중 하나라도 비어 있으면 `ROUTER_LLM_ENABLED=true`여도 LLM 라우팅은 비활성화됩니다.
 
 Agent 컨테이너는 기본적으로 Docker 내부에서만 접근할 수 있도록 `expose`를 사용합니다.
 
@@ -139,14 +145,19 @@ Main은 `queued`, `running`, `succeeded`, `failed`, `cancelled` 상태를 관리
 video-agent 전용 A2A Task Proxy Route입니다.
 
 ```http
-POST /api/video-agent/tasks
-GET  /api/video-agent/tasks/{task_id}
-POST /api/video-agent/tasks/{task_id}/cancel
+POST   /api/video-agent/tasks
+GET    /api/video-agent/tasks?owner=...&limit=20&offset=0
+GET    /api/video-agent/tasks/{task_id}
+GET    /api/video-agent/tasks/{task_id}/detail
+POST   /api/video-agent/tasks/{task_id}/cancel
+DELETE /api/video-agent/tasks/{task_id}
+GET    /api/video-agent/veo-usage
+POST   /api/video-agent/tasks/{task_id}/scenes/{scene_id}/resume
 ```
 
-`POST /api/video-agent/tasks`는 video-agent의 `message:send`를 호출해 Task를 생성하거나(모호한 요청이면 명확화 질문을 반환), 나머지 두 Route는 각각 Task 상태 조회와 취소를 video-agent에 그대로 proxy합니다.
+`POST /api/video-agent/tasks`는 video-agent의 `message:send`를 호출해 Task를 생성하고(모호한 요청이면 명확화 질문을 반환), 담당자별 업무 로그(`task_log_store`)에도 "진행 중" 항목을 남깁니다. `GET /tasks`는 `owner`로 필터링된 Task 목록(갤러리용, 페이지네이션 포함)을, `GET /tasks/{task_id}/detail`은 내러티브·스토리보드·프롬프트까지 포함한 전체 생성 기록을 반환합니다. `DELETE`는 Task와 결과 영상 파일을 함께 삭제하며(진행 중인 Task는 거부, 먼저 취소 필요), `GET /veo-usage`는 로컬 Veo 호출 카운터를(Google 실제 쿼터 아님) 반환합니다. 나머지는 각각 Task 상태 조회, 취소, 수동 수정 이미지 재개(resume)를 video-agent에 그대로 proxy합니다. `video_agent_client.py`가 이 모든 호출에 `VIDEO_SERVICE_TOKEN` Bearer 인증을 붙입니다.
 
-Video Agent Frontend는 `frontend/video-agent.html`을 별도 Vite Entry로 제공합니다. 아직 메인 앱 Sidebar에는 연결되어 있지 않으며(추후 작업), `npm run dev` 실행 중에는 `/video-agent.html`에서 확인할 수 있습니다.
+Video Agent Frontend는 더 이상 별도 Vite Entry(`video-agent.html`)가 아니라 메인 앱 SPA 안의 전용 페이지(`frontend/src/video-agent/VideoAgentPage.tsx`, 갤러리는 `VideoGallery.tsx`/`VideoDetailModal.tsx`)로 통합되어 메인 Sidebar 네비게이션에서 바로 접근할 수 있습니다.
 
 Frontend 테스트:
 

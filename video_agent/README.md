@@ -10,7 +10,7 @@ Given a short brief (e.g. "할로윈 신규 캐릭터 공개 이벤트") plus a 
 
 `run_pipeline(ProjectInput)` runs seven agent stages in order:
 
-1. **PlanningAgent** turns the brief into a `Narrative`: exactly 4 **beats** — `setup`, `conflict`, `climax`, `resolution` — the classic four-act shape, one per eventual scene. It also produces a single `StyleGuide` (`visual_style`, `color_palette`, `subject_blueprint`) meant to be reused verbatim across every scene, so the "same" character/setting doesn't visually drift beat to beat.
+1. **PlanningAgent** turns the brief into a `Narrative`: exactly 4 **beats** — `setup`, `conflict`, `climax`, `resolution` — the classic four-act shape, one per eventual scene. It also produces a single `StyleGuide` (`visual_style`, `color_palette`, `subject_blueprint`, and an optional `secondary_subject_blueprint` for a second recurring subject — a creature, vehicle, or antagonist — when the video has one) meant to be reused verbatim across every scene, so the "same" character/setting (and, when present, the "same" creature) doesn't visually drift beat to beat.
 2. **StoryboardAgent** turns each beat into a `Scene` (camera/subject/action/setting), deterministically copying the `StyleGuide` onto every scene rather than trusting each independently-drafted scene to reword the same character consistently.
 3. **PromptAgent** turns each scene into two English prompts: `image_prompt` (static composition — style/subject/action/setting/framing) and `video_motion_prompt` (camera/motion only). Tone follows the scene's beat: `climax` reads intense/dynamic/high-contrast, `setup` reads calm/wide/establishing.
 4. **ImageAgent** generates a candidate keyframe image from `image_prompt`.
@@ -53,8 +53,12 @@ Environment variables:
 
 Endpoints (`/a2a/*` routes require `Authorization: Bearer {VIDEO_SERVICE_TOKEN}` + `A2A-Version: 1.0`; the rest don't):
 - `GET /.well-known/agent-card.json` — unauthenticated
-- `POST /a2a/message:send` — authenticated
+- `POST /a2a/message:send` — authenticated. Send an optional `X-Video-Agent-User` header to tag the created task with an owner (URL-encoded); the same value is later used to filter `GET /a2a/tasks`. `messageId` is de-duplicated server-side (`claim_message_id`) — resending the same `messageId` returns the already-created task instead of starting a second render.
 - `GET /a2a/tasks/{task_id}` — authenticated
+- `GET /a2a/tasks?user_id=...&limit=20&offset=0` — authenticated. Lists tasks for one owner (paginated, `has_more` in the response), backing the video gallery view.
+- `GET /a2a/tasks/{task_id}/detail` — authenticated. Returns the full generation record (narrative/storyboard/prompts, not just task status) by loading the linked project from `ProjectStore` — used for a gallery thumbnail's "view details" panel.
+- `DELETE /a2a/tasks/{task_id}` — authenticated. Deletes the task record, its output video file, and its stored project JSON. Refuses tasks still `SUBMITTED`/`WORKING` — cancel first, then delete.
+- `GET /a2a/veo-usage` — authenticated. Returns `{used, limit, resetsAt}` from the local Veo call counter (`veo_usage_repository.py`) — a per-instance, 24h-rolling count, not Google's actual account-level quota (see that module's docstring).
 - `POST /a2a/tasks/{task_id}:cancel` — authenticated
 - `GET /media/{filename}` — unauthenticated
 - `POST /tasks/{task_id}/scenes/{scene_id}/resume` — unauthenticated
@@ -199,6 +203,8 @@ An injected real agent's own `model_name` applies for that stage — `ModelConfi
 ### Global style consistency across scenes
 
 Because `prompt_agent` and `image_agent` each run once per scene with no visibility into other scenes' calls, nothing used to stop the 4 generated images from looking like 4 unrelated pictures — a different-looking "same" character, a different art style, different color grading per shot. `planning_agent` now also produces a `StyleGuide` (`Narrative.style_guide`: `visual_style`, `color_palette`, `subject_blueprint`) alongside the 4 beats. `storyboard_agent` deterministically copies `subject_blueprint`/`visual_style`/`color_palette` onto **every** scene's `Storyboard` — it does not trust the LLM to reword the same character consistently on each independently-drafted scene; the anchor text is reused verbatim (falling back to the storyboard LLM's own per-scene guess only if no blueprint is present, e.g. a stub `Narrative`). `prompt_agent` then translates that anchor into English once per scene, explicitly instructed to keep it consistent with "how the same character/style would be described in any other scene of this project."
+
+The same mechanism now covers a **second** recurring subject via `StyleGuide.secondary_subject_blueprint` (e.g. a monster, creature, or vehicle that appears across multiple scenes but isn't the main character). `planning_agent` only fills it in when the brief actually implies a second recurring subject, otherwise it's left empty; `storyboard_agent` copies it onto every scene the same way as `subject_blueprint`, and `prompt_agent` is explicitly told not to invent a second recurring character on its own when it's empty. This closed a real bug: without a shared blueprint, an independently-drafted "creature" in each scene rendered with a different eye shape, body shape, and color per scene, since nothing anchored the description across the 4 independent `prompt_agent`/`image_agent` calls.
 
 `prompt_agent` also now factors in `scene.beat_id` for tone (a `climax` scene reads as "intense, dynamic, high-contrast," a `setup` scene as "calm, wide, establishing"), enforces separate prompt formulas for `image_prompt` (static: style/subject/action/setting/framing, no camera-movement verbs) vs. `video_motion_prompt` (motion/camera only, no repeated static detail), and forces English output for both regardless of the Korean scene input — image and video diffusion models handle English prompts far more reliably. `required_elements` (from `ProjectInput.brand_requirements`) still get deterministically string-appended after the LLM call rather than trusted to survive inside the generated text, since those are the client's actual commissioned requirements, not a nice-to-have.
 
