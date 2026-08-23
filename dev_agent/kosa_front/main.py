@@ -474,6 +474,48 @@ async def get_docker_container_logs(name: str) -> str:
     return logs.stdout or logs.stderr or "(로그 없음)"
 
 
+async def delete_docker_deployment(name: str) -> None:
+    """kosa-deploy-* 컨테이너 하나(또는 그게 속한 compose 프로젝트 전체)를 삭제한다.
+
+    RUNNING이면 거부한다 — 이 화면은 STOPPED된 옛 배포를 정리하는 용도지, 지금 쓰고
+    있을 수도 있는 배포를 지우는 용도가 아니다. compose로 뜬 컨테이너면(`com.docker.
+    compose.project` 라벨이 있음) 같은 프로젝트의 컨테이너/네트워크를 전부 내린다 —
+    하나만 지우면 나머지가 고아로 남는 걸 실제로 겪었다(mysql만 지우고 app은 그대로
+    남는 식). `docker compose -p <project> down`은 compose 파일 없이 프로젝트 이름
+    (라벨)만으로 동작한다 — 직접 검증됨.
+    """
+    if not name.startswith(DEPLOY_CONTAINER_PREFIX):
+        raise HTTPException(status_code=400, detail="유효하지 않은 컨테이너 이름입니다.")
+
+    try:
+        inspect = await asyncio.to_thread(
+            _run_docker,
+            [
+                "inspect", "--format",
+                '{{.State.Running}}\t{{index .Config.Labels "com.docker.compose.project"}}',
+                name,
+            ],
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise HTTPException(status_code=502, detail=f"컨테이너 상태를 확인하지 못했습니다: {e}")
+
+    if inspect.returncode != 0:
+        raise HTTPException(status_code=404, detail=(inspect.stderr or "컨테이너를 찾을 수 없습니다.").strip())
+
+    running, _, project = inspect.stdout.strip("\n").partition("\t")
+    if running == "true":
+        raise HTTPException(status_code=409, detail="실행 중인 컨테이너는 삭제할 수 없습니다.")
+
+    args = ["compose", "-p", project, "down"] if project else ["rm", name]
+    try:
+        result = await asyncio.to_thread(_run_docker, args)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise HTTPException(status_code=502, detail=f"삭제하지 못했습니다: {e}")
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=(result.stderr or "삭제에 실패했습니다.").strip())
+
+
 # ==========================================
 # Mock Data Generators (Graceful Fallback)
 # ==========================================
@@ -802,6 +844,13 @@ async def get_deployment_logs(name: str):
     """Recent docker logs for a single kosa-deploy-* container."""
     logs = await get_docker_container_logs(name)
     return {"name": name, "logs": logs}
+
+
+@app.delete("/api/deployments/{name}")
+async def delete_deployment(name: str):
+    """Delete a stopped kosa-deploy-* deployment (and its compose siblings, if any)."""
+    await delete_docker_deployment(name)
+    return {"status": "deleted", "name": name}
 
 
 @app.post("/api/config/update")
