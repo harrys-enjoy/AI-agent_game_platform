@@ -79,6 +79,21 @@ def test_find_mentioned_branch_ignores_substring_inside_dotted_filename():
     assert _find_mentioned_branch("main.py 파일 좀 보여줘", ["main"]) is None
 
 
+def test_find_mentioned_branch_matches_branch_in_github_tree_url():
+    # 실사용 중 발견한 회귀: GitHub URL의 "/tree/<branch>"처럼 브랜치명 바로 앞에
+    # "/"가 오면(URL 경로 구분자), "/"를 경계 문자로 치는 예전 구현은 매치를 거부해서
+    # 항상 기본 브랜치로 폴백됐다. "/"는 경계가 아니어야 한다.
+    request = "https://github.com/traefik/whoami/tree/feat-bench 이것도 배포해봐"
+    assert _find_mentioned_branch(request, ["master", "feat-bench"]) == "feat-bench"
+
+
+def test_find_mentioned_branch_matches_branch_with_internal_slash_in_url():
+    # 브랜치명 자체에 "/"가 있어도(예: "feat/x") URL 안에서 정확히 리터럴로 매치돼야
+    # 한다 — 경계 문자에서 "/"를 뺀 게 브랜치명 내부의 "/" 매칭에는 영향 없어야 한다.
+    request = "https://github.com/owner/repo/tree/feat/x 배포해줘"
+    assert _find_mentioned_branch(request, ["main", "feat/x"]) == "feat/x"
+
+
 def test_resolve_ref_uses_mentioned_branch_when_no_pr_number():
     state = {"pr_number": None, "prs": [], "request": "feat/x 배포해줘", "branches": ["beta", "feat/x"]}
     assert _resolve_ref(state, FakeRepo()) == "feat/x"
