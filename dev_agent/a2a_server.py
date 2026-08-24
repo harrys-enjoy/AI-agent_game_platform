@@ -193,7 +193,13 @@ def _extract_request_text(message: A2AMessage) -> str:
     return "\n".join(part.text for part in message.parts if part.text)
 
 
-_GITHUB_REPO_URL_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#\s]|$)")
+# 레포명 뒤를 "/", "?", "#", 공백, 문자열 끝으로만 끝난다고 보면(원래 구현), 한국어
+# 조사가 URL에 공백 없이 바로 붙는 흔한 표현("...whoami의 master 브랜치 배포해봐")에서
+# "의" 앞에서 매치 자체가 실패해서 레포를 통째로 못 읽었다 — REPO_ACCESS_CONTROL_DISABLED가
+# 켜져 있으면 이때 조용히 워크스페이스 기본 레포로 폴백돼서, 완전히 다른 레포가 배포되는
+# 사고로 이어졌다(실제로 겪음). 레포명 문자 집합에 없는 아무 문자(비-ASCII 포함)에서나
+# 끝나면 되도록 lookahead로 바꿨다 — _find_mentioned_branch의 _BOUNDARY와 같은 종류의 수정.
+_GITHUB_REPO_URL_RE = re.compile(r"github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?=[^A-Za-z0-9_.-]|$)")
 
 
 def _parse_repo_from_text(text: str) -> str | None:

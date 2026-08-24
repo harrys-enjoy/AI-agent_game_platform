@@ -228,6 +228,15 @@ def test_parse_repo_from_text_returns_none_without_github_url():
     assert _parse_repo_from_text("이 PR 리뷰해줘") is None
 
 
+def test_parse_repo_from_text_matches_when_korean_particle_glued_to_url():
+    # 실사용 중 발견한 회귀: "...whoami의 master 브랜치 배포해봐"처럼 조사가 URL
+    # 끝에 공백 없이 바로 붙으면, 예전 구현은 "의" 앞에서 매치가 통째로 실패해서
+    # 레포를 못 읽었다 — REPO_ACCESS_CONTROL_DISABLED가 켜져 있으면 이때 조용히
+    # 워크스페이스 기본 레포로 폴백돼서 완전히 다른 레포가 배포됐다.
+    text = "https://github.com/traefik/whoami의 master 브랜치 배포해봐."
+    assert _parse_repo_from_text(text) == "traefik/whoami"
+
+
 def test_send_message_rejects_repo_mentioned_in_text_that_differs_from_mapped_repo(monkeypatch):
     monkeypatch.setenv("DEV_SERVICE_TOKEN", "secret")
     monkeypatch.setattr(a2a_server, "WORKSPACE_REPOS", {"game-team-a": "owner/game-server"})
