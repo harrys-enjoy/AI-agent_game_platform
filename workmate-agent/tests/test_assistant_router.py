@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock, patch
 
 from app.workflows import assistant_router
 from app.workflows.assistant_router import (
@@ -300,13 +301,15 @@ class RouteTests(unittest.TestCase):
         `review_proposal`(decision=ignore)을 잘못 골랐다. Context에 `due_at`이 들어가야
         LLM이 직접 답할 수 있다."""
 
+        match_response = FakeResponse(_completion({"matched_index": 0}))
         response = FakeResponse(_completion({"action": "reply", "reply": "ok", "skill_id": None, "arguments": None}))
         context = {"proposals": [{"proposal_id": "p-1", "title": "신규 입사자 환영회", "source_type": "calendar", "calendar_id": "primary", "event_id": "evt-1", "due_at": "2026-08-21T18:00:00+09:00"}]}
-        with patch("app.workflows.assistant_router.request.urlopen", return_value=response) as mocked:
-            route("신규 입사자 환영회 언제인지 캘린더에서 찾아줘", context=context, api_key="test")
-        sent_body = json.loads(mocked.call_args.args[0].data)
+        with patch("app.workflows.assistant_router.request.urlopen", side_effect=[match_response, response]) as mocked:
+            routed = route("신규 입사자 환영회 언제인지 캘린더에서 찾아줘", context=context, api_key="test")
+        sent_body = json.loads(mocked.call_args_list[1].args[0].data)
         system_message = sent_body["messages"][0]["content"]
         self.assertIn("2026-08-21T18:00:00+09:00", system_message)
+        self.assertEqual(routed.evidence_source, "calendar")
 
     def test_prompt_warns_against_treating_read_only_questions_as_write_requests(self) -> None:
         """같은 버그의 근본 원인 절반 — System Prompt에 "정보를 묻는 질문과 실행 요청을
@@ -781,6 +784,22 @@ class AssistantAskWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.markdown, "다시 말씀해 주세요.")
         self.assertEqual(result.data["data"]["pending_action"], None)
 
+    async def test_calendar_context_reply_appends_calendar_evidence(self) -> None:
+        routed = RoutedAction(
+            action="reply",
+            reply="프로젝트 회식은 2026년 8월 26일 오후 5시 30분입니다.",
+            skill_id=None,
+            arguments=None,
+            evidence_source="calendar",
+        )
+        with patch.object(assistant_router, "route", return_value=routed):
+            result = await assistant_ask_workflow(_request(text="프로젝트 회식 언제지?"))
+
+        self.assertEqual(
+            result.markdown,
+            "프로젝트 회식은 2026년 8월 26일 오후 5시 30분입니다.\n\n근거: 캘린더",
+        )
+
     async def test_non_destructive_call_skill_executes_and_phrases_the_answer(self) -> None:
         sub_result = WorkflowResult(
             artifact_name="daily_briefing",
@@ -831,6 +850,68 @@ class AssistantAskWorkflowTests(unittest.IsolatedAsyncioTestCase):
             "weekly_report",
             {"summary": "완료 0건"},
             markdown="# 주간 보고서\n\n## 주요 회의 내용\n\n- 스프린트 리뷰: 다음 빌드 일정에 합의했다.",
+        )
+
+    async def test_search_meetings_reply_appends_only_the_top_meeting(self) -> None:
+        sources = [
+            {"meeting_id": "m-1", "meeting_date": "2026-08-22", "meeting_title": "2주년 업데이트 BM 확정"},
+            {"meeting_id": "m-1", "meeting_date": "2026-08-22", "meeting_title": "2주년 업데이트 BM 확정"},
+            {"meeting_id": "m-2", "meeting_date": "2026-08-21", "meeting_title": "캐릭터 원화 검수"},
+        ]
+        sub_result = WorkflowResult(
+            artifact_name="grounded_answer",
+            artifact_description="",
+            text="{}",
+            data={"type": "grounded_answer", "data": {"answer": "매출 반등입니다.", "sources": sources}},
+            mock=False,
+        )
+        fake_registry = AsyncMock()
+        fake_registry.execute.return_value = sub_result
+        meeting_repository = Mock()
+        meeting_repository.get.return_value = Mock(
+            started_at=datetime(2026, 8, 22, 9, 51, tzinfo=timezone.utc),
+            created_at=datetime(2026, 8, 22, 9, 50, tzinfo=timezone.utc),
+        )
+        with patch.object(assistant_router, "route", return_value=RoutedAction(action="call_skill", reply=None, skill_id="search_meetings", arguments={"query": "2주년 업데이트 핵심"})):
+            with patch.object(assistant_router, "phrase_answer", return_value="핵심은 매출 반등입니다."):
+                with patch("app.a2a.runtime.workflow_registry", return_value=fake_registry), patch(
+                    "app.meeting_api.meeting_repository", return_value=meeting_repository
+                ):
+                    result = await assistant_ask_workflow(_request(text="회의록에서 찾아줘"))
+
+        self.assertEqual(
+            result.markdown,
+            "핵심은 매출 반등입니다.\n\n근거 회의\n"
+            "- 2026-08-22 18:51 · 2주년 업데이트 BM 확정",
+        )
+        meeting_repository.get.assert_called_once_with("m-1", "user-a")
+
+    async def test_read_email_reply_appends_received_date_and_subject(self) -> None:
+        email_data = {
+            "message_id": "msg-1",
+            "subject": "시즌 패스 보상 지급 로직 변경",
+            "received_at": "2026-08-22T09:30:00+00:00",
+            "body": "Claim All 기능이 추가됩니다.",
+            "available": True,
+        }
+        sub_result = WorkflowResult(
+            artifact_name="read_email",
+            artifact_description="",
+            text="{}",
+            data={"type": "email_content", "data": email_data},
+            mock=False,
+        )
+        fake_registry = AsyncMock()
+        fake_registry.execute.return_value = sub_result
+        with patch.object(assistant_router, "route", return_value=RoutedAction(action="call_skill", reply=None, skill_id="read_email", arguments={"message_id": "msg-1"})):
+            with patch.object(assistant_router, "phrase_answer", return_value="Claim All 기능이 추가됩니다."):
+                with patch("app.a2a.runtime.workflow_registry", return_value=fake_registry):
+                    result = await assistant_ask_workflow(_request(text="메일 내용 알려줘"))
+
+        self.assertEqual(
+            result.markdown,
+            "Claim All 기능이 추가됩니다.\n\n근거 메일\n"
+            "- 2026-08-22 · 시즌 패스 보상 지급 로직 변경",
         )
 
     async def test_destructive_review_action_items_reject_asks_for_confirmation_first(self) -> None:

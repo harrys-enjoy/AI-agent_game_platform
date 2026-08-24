@@ -202,6 +202,7 @@ async def read_email_workflow(request: WorkflowRequest) -> WorkflowResult:
         "data": {
             "message_id": message.message_id,
             "subject": subject,
+            "received_at": message.received_at,
             "body": excerpt,
             "available": True,
             "search_window_note": search_note,

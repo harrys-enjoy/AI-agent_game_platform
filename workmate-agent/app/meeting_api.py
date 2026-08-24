@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.meeting import MeetingRecord, RecordingRecord
 from app.internal_chat import _authenticated_user_or_assignee
+from app.repositories.meeting_chunks import PostgresMeetingChunkRepository
 from app.repositories.meetings import SQLiteMeetingRepository
 from app.storage.r2 import R2Config, R2StorageAdapter
 
@@ -69,6 +70,13 @@ def meeting_repository() -> SQLiteMeetingRepository:
     return SQLiteMeetingRepository(os.getenv(MEETING_DB_PATH_ENV, ".runtime/meetings.sqlite3"))
 
 
+def meeting_index_repository() -> PostgresMeetingChunkRepository | None:
+    """설정된 경우 PostgreSQL 회의 검색 색인 저장소를 반환한다."""
+
+    dsn = os.getenv("DATABASE_URL")
+    return PostgresMeetingChunkRepository(dsn) if dsn else None
+
+
 router = APIRouter(prefix="/api/v1/meetings", tags=["meetings"])
 
 
@@ -112,14 +120,23 @@ def get_meeting(meeting_id: str, user_id: str = Depends(_authenticated_user_or_a
 
 @router.delete("/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_meeting(meeting_id: str, user_id: str = Depends(_authenticated_user_or_assignee)) -> None:
-    """회의를 Soft Delete한다(2026-08-17, 사용자 요청) — 목록·상세 조회에서 더는 보이지 않는다.
+    """회의를 Soft Delete하고 PostgreSQL 검색 색인에서는 완전히 제거한다.
 
-    Recording·Transcript·Action Item·검색 색인(Postgres `meeting_chunks`)은 지우지 않는다 —
-    Task의 `deleted_at` Soft Delete와 같은 범위 선택이다(완전 삭제는 R2 원본 음성까지
-    함께 지워야 해 범위가 더 크다).
+    Recording·Transcript·Action Item은 근거 링크 보존을 위해 유지한다. 검색
+    색인은 삭제된 회의가 이후 검색 결과에 다시 나오지 않도록 부모 `meetings`
+    행과 `ON DELETE CASCADE` 관계의 `meeting_chunks`를 함께 제거한다.
     """
 
-    if not meeting_repository().delete(meeting_id, user_id):
+    repository = meeting_repository()
+    if repository.get(meeting_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="meeting not found")
+    index_repository = meeting_index_repository()
+    if index_repository is not None:
+        try:
+            index_repository.delete_meeting(meeting_id, user_id)
+        except Exception as exc:  # noqa: BLE001 - 색인 실패 시 Soft Delete를 중단해 상태 불일치를 막는다.
+            raise HTTPException(status_code=503, detail="meeting search index deletion failed") from exc
+    if not repository.delete(meeting_id, user_id):
         raise HTTPException(status_code=404, detail="meeting not found")
 
 

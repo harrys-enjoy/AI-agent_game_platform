@@ -66,8 +66,13 @@ docker compose up --build
 | --- | --- | --- |
 | `WORKMATE_SERVICE_TOKEN` | 위 `main_agent/.env`의 같은 키와 **반드시 동일한 값** | 필수 |
 | `APP_BASE_URL` | 컨테이너가 자기 Agent Card에 광고할 URL. Docker 내부에서는 보통 `http://workmate-agent:8001/a2a` 그대로 | 선택(기본값 있음) |
+| `OPENAI_API_KEY` | 회의 분석, 메일 Action Item 추출, 자연어 Assistant 응답에 사용하는 OpenAI 호환 API 키 | LLM 기능 사용 시 필수 |
+| `OPENAI_BASE_URL` / `OPENAI_MODEL` | OpenAI 호환 API 주소와 모델 이름 | 선택(기본값 있음) |
+| `GOOGLE_CLIENT_SECRET_FILE` / `GOOGLE_TOKEN_FILE` | Gmail·Calendar OAuth Client Secret과 사용자 Token 파일 경로. Compose에서는 `google-oauth-test/`의 파일을 컨테이너에 마운트 | Google 연동 시 필수 |
+| `WORKMATE_OAUTH_REDIRECT_BASE_URL` | Google OAuth Callback을 받을 Workmate REST API의 외부 주소. Compose에서는 `http://localhost:8100` | Google 계정 연결 시 필수 |
+| `DATABASE_URL` | Task·제안·동기화 상태와 회의 검색 색인에 사용하는 PostgreSQL 접속 주소. Compose에서는 자동 주입 | 회의 검색·Compose 운영에 필수 |
 
-`workmate-agent/.env.example`을 복사해서 시작하면 됩니다.
+`workmate-agent/.env`는 Git에 포함되지 않으므로 로컬에서 직접 준비합니다. Google OAuth 파일도 Secret이므로 `workmate-agent/google-oauth-test/`에 로컬로만 두고 커밋하지 않습니다.
 
 ### 3. video_agent / dev_agent / qna_agent 자체 `.env.example`
 
@@ -96,16 +101,19 @@ docker compose up --build
 | Agent | Docker 서비스명 | 내부 Port | 호스트 노출 | 상태 |
 | --- | --- | --- | --- | --- |
 | Main Orchestrator | `main-agent` | 8000 | `8000:8000` | 실제 |
-| 업무지원 (Workmate AI) | `workmate-agent` | 8001 | 미노출 | A2A Mock (`app.py`, 고정 5개 스킬만 흉내) — 실제 백엔드는 별도, 아래 참고 |
+| 업무지원 (Workmate AI) | `workmate-agent` | 8001 | `8100:8001` | 실제 A2A + REST 백엔드 |
 | 영상 생성 | `video-agent` | 8002 | `8002:8002` | 실제 (Gemini + Veo/LTX 파이프라인) |
 | 개발 보조 | `dev-agent` | 8003 | 미노출 | 실제 |
 | 게임 Q&A | `game-qa-agent` | 3000 | 미노출 | 실제 |
 | dev-agent GitHub 대시보드 | `kosa-front` | 8000(컨테이너 내부) | `8004:8000` | 실제 |
 
-## 알려진 미완성 부분
+## Workmate 실행 구조
 
-- **workmate-agent 실제 백엔드 (포트 8100) 미구현**: 프론트엔드의 `main_agent/frontend/src/workmate/` 모듈(오늘 브리핑, 주간 업무보고, 할 일 관리, 회의 녹음/분석, 제안함)은 Docker의 `workmate-agent` 컨테이너(포트 8001, A2A 프로토콜용 간단한 Mock)가 아니라 **완전히 별도의 REST API**(`http://127.0.0.1:8100`)를 호출합니다. 이 REST API는 workmate-agent 담당자의 실제 백엔드 저장소에만 있고 아직 이 모노레포에 반영되지 않았습니다(2026-08-19 본인 확인, 추후 별도로 푸시 예정). 그 전까지는 해당 화면들이 "Failed to fetch" 에러를 띄웁니다.
-- `main_agent/README.md`는 통합 이전(단독 저장소 시절) 문서라 일부 내용이 오래됐습니다(video-agent/dev-agent를 "Mock"으로 표기 등).
+`workmate-agent`의 단일 FastAPI 앱이 컨테이너 내부 `8001`에서 A2A(`/a2a/*`)와 Workmate REST API(`/api/v1/*`)를 함께 제공합니다. Main Agent는 Docker 네트워크의 `http://workmate-agent:8001/a2a`로 통신하고, 브라우저의 Workmate 화면은 호스트에 공개된 `http://127.0.0.1:8100`으로 REST API를 호출합니다.
+
+Compose는 PostgreSQL(`pgvector`)을 함께 실행하고 `DATABASE_URL`을 Workmate에 주입합니다. PostgreSQL이 없거나 `DATABASE_URL`이 누락된 단독 실행에서는 일부 로컬 기능은 SQLite로 동작하지만, 이전 회의 검색처럼 PostgreSQL 색인이 필요한 기능은 사용할 수 없습니다.
+
+현재 Workmate 화면은 오늘 브리핑, 주간 업무보고, 할 일 관리, 회의 녹음·분석·검색, Gmail·Calendar 제안과 검토 기능을 제공합니다. Google 연동 기능은 로컬 OAuth Client Secret과 Token이 설정되어 있어야 합니다.
 
 ## 실행 확인
 
