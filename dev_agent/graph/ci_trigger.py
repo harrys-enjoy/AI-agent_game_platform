@@ -6,6 +6,7 @@ fetch 노드가 '이미 끝난' 체크 결과를 수동적으로 읽는 것과 �
 """
 
 import os
+import re
 import time
 
 from github import Github
@@ -15,18 +16,51 @@ from graph.fetch import get_github_client
 WORKFLOW_FILE = "tests.yml"
 POLL_INTERVAL_SEC = 10
 DEFAULT_TIMEOUT_SEC = 600
+# Python의 \w는 유니코드 인식이라 한글도 "단어 문자"로 쳐서 "feat/x를"처럼 조사가
+# 브랜치명에 바로 붙는(공백 없는) 가장 흔한 한국어 표현을 못 잡는다. 그래서 경계
+# 문자 클래스를 ASCII로 제한한다 — "." 도 경계에 포함해 "main.py" 같은 파일명
+# 안의 오탐도 막는다(원래 계획엔 없었지만 같은 문제라 같이 닫는다).
+# "/"는 경계에서 뺐다 — GitHub URL(".../tree/feat-bench")처럼 브랜치명 바로 앞에
+# "/"가 오는 게 흔한데, "/"를 경계로 치면 그 앞의 "/" 때문에 매치가 거부돼서
+# 항상 기본 브랜치로 폴백됐다(실제로 겪음). "/"는 "_"/"."/"-"와 달리 토큰을
+# 하나로 묶는 문자가 아니라 진짜 구분자라 경계로 볼 필요가 애초에 없었다 —
+# "feat"과 "feat/x"가 둘 다 있을 때 더 구체적인 쪽을 우선하는 건 아래 longest-first
+# 정렬이 이미 처리한다.
+_BOUNDARY = r"[A-Za-z0-9_.-]"
 
 def _timeout_sec() -> int:
     return int(os.getenv("CI_TRIGGER_TIMEOUT_SEC", DEFAULT_TIMEOUT_SEC))
 
 
+def _find_mentioned_branch(request: str, branches: list[str]) -> str | None:
+    """요청 텍스트에 실제 브랜치 이름이 단어 경계로 등장하면 그 이름을 돌려준다.
+
+    긴 이름부터 검사해서 "feat"과 "feat/x"가 둘 다 존재할 때 더 구체적인 쪽을
+    우선한다. 단순 substring 검사면 "main"이 "main_agent" 안에서 오탐된다 — 이
+    모노레포 자체에 그런 디렉터리가 있어 실제로 위험한 케이스다. 앞뒤가
+    ASCII 단어 문자(영숫자/밑줄)나 ".", "-"가 아닐 때만 진짜 매치로 인정한다
+    (branch 안에 포함된 "/"는 re.escape로 그대로 리터럴 매치되므로 영향 없음 —
+    "/"를 경계에서 뺀 이유는 위 _BOUNDARY 정의 옆 주석 참고). \\w를 그대로 쓰면 유니코드 인식이라 한글 조사가 브랜치명에 바로
+    붙는 표현("feat/x를 배포해줘")을 못 잡으므로 _BOUNDARY로 ASCII만 경계로 친다.
+    """
+    for branch in sorted(branches, key=len, reverse=True):
+        pattern = rf"(?<!{_BOUNDARY}){re.escape(branch)}(?!{_BOUNDARY})"
+        if re.search(pattern, request):
+            return branch
+    return None
+
+
 def _resolve_ref(state: dict, repo) -> str:
-    """실행할 브랜치를 정한다. PR 번호가 주어졌으면 그 PR의 브랜치, 아니면 레포 기본 브랜치."""
+    """실행할 브랜치를 정한다. PR 번호가 주어졌으면 그 PR의 브랜치, 아니면 요청 텍스트에
+    실제 브랜치 이름이 언급됐으면 그 브랜치, 그것도 아니면 레포 기본 브랜치."""
     pr_number = state.get("pr_number")
     if pr_number:
         for pr in state.get("prs", []):
             if pr.get("number") == pr_number and pr.get("branch"):
                 return pr["branch"]
+    mentioned = _find_mentioned_branch(state.get("request") or "", state.get("branches") or [])
+    if mentioned:
+        return mentioned
     return repo.default_branch
 
 

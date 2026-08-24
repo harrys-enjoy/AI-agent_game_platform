@@ -16,6 +16,7 @@ from graph.deploy_trigger import (
     _docker_path,
     _find_compose_file,
     _find_free_port,
+    _host_ports_in_use,
     _lock_file,
     _parse_exposed_port,
     _release_lock,
@@ -87,10 +88,14 @@ def _make_run(overrides: dict):
     return fake_run
 
 
+def _fake_run_reports_no_ports_in_use(cmd, **kwargs):
+    return FakeCompleted(stdout="")
+
+
 def test_find_free_port_returns_first_available():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
         occupied.bind(("127.0.0.1", 40000))
-        port = _find_free_port(range(40000, 40003))
+        port = _find_free_port("docker", _fake_run_reports_no_ports_in_use, range(40000, 40003))
 
     assert port in (40001, 40002)
 
@@ -103,10 +108,42 @@ def test_find_free_port_returns_none_when_range_exhausted():
             s.bind(("127.0.0.1", p))
             sockets.append(s)
 
-        assert _find_free_port(range(40000, 40003)) is None
+        assert _find_free_port("docker", _fake_run_reports_no_ports_in_use, range(40000, 40003)) is None
     finally:
         for s in sockets:
             s.close()
+
+
+def test_find_free_port_skips_ports_docker_ps_reports_busy():
+    """dev-agent 자신의 네트워크 네임스페이스에서 소켓 bind는 성공해도(호스트의 실제
+    사용 현황을 못 봄), docker ps가 이미 그 포트를 쓰고 있다고 보고하면 건너뛴다 —
+    main-agent가 호스트 8000을 쓰는데 dev-agent 안에서는 비어있는 것처럼 보여 실제로
+    포트 충돌이 났던 버그를 고정하는 회귀 테스트."""
+    def fake_run(cmd, **kwargs):
+        assert cmd[1] == "ps"
+        return FakeCompleted(stdout="0.0.0.0:40000->8000/tcp, :::40000->8000/tcp\n")
+
+    port = _find_free_port("docker", fake_run, range(40000, 40003))
+
+    assert port == 40001
+
+
+def test_host_ports_in_use_parses_docker_ps_output():
+    def fake_run(cmd, **kwargs):
+        return FakeCompleted(stdout=(
+            "0.0.0.0:8000->8000/tcp, :::8000->8000/tcp\n"
+            "0.0.0.0:8004->8000/tcp\n"
+            "8003/tcp\n"
+        ))
+
+    assert _host_ports_in_use("docker", fake_run) == {8000, 8004}
+
+
+def test_host_ports_in_use_returns_empty_set_on_docker_ps_failure():
+    def fake_run(cmd, **kwargs):
+        return FakeCompleted(returncode=1, stderr="daemon not running")
+
+    assert _host_ports_in_use("docker", fake_run) == set()
 
 
 def test_tail_returns_last_n_lines():
@@ -234,6 +271,40 @@ def test_deploy_trigger_node_reports_health_check_timeout():
 
     assert "응답이 없습니다" in result["results"]["deploy"]
     assert "app crashed on boot" in result["results"]["deploy"]
+
+
+def test_deploy_trigger_node_health_checks_via_host_docker_internal():
+    """dev-agent 자신의 네트워크 네임스페이스에서 "localhost"는 호스트가 아니라 dev-agent
+    자신을 가리킨다 — 방금 배포한 컨테이너가 호스트에 게시한 포트를 "localhost"로 찔러보면
+    항상 응답이 없다고(연결 자체가 안 됨) 오판한다. Docker Desktop이 컨테이너 안에서 호스트를
+    가리키도록 제공하는 host.docker.internal로 헬스체크해야 한다 — 실제로 whoami를 배포했을 때
+    호스트에서는 정상 응답했는데 이 헬스체크가 "응답 없음"으로 오판했던 버그의 회귀 테스트."""
+    fake_run = _make_run(
+        {
+            "info": FakeCompleted(returncode=0),
+            "clone": FakeCompleted(returncode=0),
+            "build": FakeCompleted(returncode=0),
+            "run": FakeCompleted(returncode=0),
+        }
+    )
+    captured = {}
+
+    def spy_health_check(url):
+        captured["url"] = url
+        return True
+
+    result = deploy_trigger_node(
+        {"repo": "owner/name"},
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=spy_health_check,
+    )
+
+    assert captured["url"].startswith("http://host.docker.internal:")
+    # 유저에게 보여주는 성공 메시지는 그대로 localhost여야 한다 — 유저는 실제 호스트에서
+    # 브라우저로 접속하는 거라 host.docker.internal은 유저 입장에선 안 통한다.
+    assert "http://localhost:" in result["results"]["deploy"]
+    assert "host.docker.internal" not in result["results"]["deploy"]
 
 
 def test_docker_path_adds_fallback_dir_to_path(monkeypatch, tmp_path):
@@ -406,6 +477,18 @@ def test_slot_name_differs_per_repo():
     assert _slot_name("owner/repo-a") != _slot_name("owner/repo-b")
 
 
+def test_slot_name_appends_branch_when_not_default():
+    assert _slot_name("owner/repo", "feat/x", "main") == "kosa-deploy-owner-repo-feat-x"
+
+
+def test_slot_name_omits_branch_when_it_equals_default():
+    assert _slot_name("owner/repo", "main", "main") == "kosa-deploy-owner-repo"
+
+
+def test_slot_name_omits_branch_when_not_provided():
+    assert _slot_name("owner/repo") == "kosa-deploy-owner-repo"
+
+
 def test_deploy_trigger_node_uses_repo_specific_slot():
     captured = {}
 
@@ -457,6 +540,87 @@ def test_deploy_trigger_node_uses_different_slot_for_different_repo():
 
     assert captured["build_tag"] == _slot_name("owner/repo-b")
     assert captured["build_tag"] != _slot_name("owner/repo-a")
+
+
+def test_deploy_trigger_node_uses_branch_specific_slot_when_branch_mentioned():
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            captured["clone_branch"] = cmd[cmd.index("--branch") + 1]
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {"repo": "owner/repo-a", "request": "feat/x 브랜치로 배포해줘", "branches": ["beta", "feat/x"]},
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["clone_branch"] == "feat/x"
+    assert captured["build_tag"] == _slot_name("owner/repo-a", "feat/x", "beta")
+    assert captured["build_tag"] != _slot_name("owner/repo-a")  # default-branch slot untouched
+
+
+def test_deploy_trigger_node_keeps_bare_slot_when_default_branch_mentioned():
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {"repo": "owner/repo-a", "request": "beta 브랜치 배포해줘", "branches": ["beta", "feat/x"]},
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["build_tag"] == _slot_name("owner/repo-a")
+
+
+def test_deploy_trigger_node_uses_branch_specific_slot_for_pr_driven_deploy():
+    """PR-number-driven deploys land in a branch-suffixed slot too, same as an
+    explicitly-named branch — pinning this so it's a deliberate, tested behavior
+    rather than a silent side effect of _resolve_ref's PR-branch priority."""
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        key = cmd[1] if len(cmd) > 1 else cmd[0]
+        if key == "clone":
+            captured["clone_branch"] = cmd[cmd.index("--branch") + 1]
+            clone_dir = _clone_dir(0)
+            clone_dir.mkdir(parents=True, exist_ok=True)
+            (clone_dir / "Dockerfile").write_text("FROM scratch\n")
+        if key == "build":
+            captured["build_tag"] = cmd[cmd.index("-t") + 1]
+        return FakeCompleted(returncode=0)
+
+    deploy_trigger_node(
+        {
+            "repo": "owner/repo-a",
+            "pr_number": 42,
+            "prs": [{"number": 42, "branch": "demo/bug-1"}],
+        },
+        gh_client=FakeGithub(),
+        run=fake_run,
+        health_check=lambda url: True,
+    )
+
+    assert captured["clone_branch"] == "demo/bug-1"
+    assert captured["build_tag"] == _slot_name("owner/repo-a", "demo/bug-1", "beta")
 
 
 def test_find_compose_file_detects_docker_compose_yml(tmp_path):

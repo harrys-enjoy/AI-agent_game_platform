@@ -1069,7 +1069,7 @@ body {
 .log-line {
   margin-bottom: 0.2rem;
 }
-.log-line.info { color: #38bdf8; }
+.log-line.info { color: #f3f4f6; }
 .log-line.warn { color: #fbbf24; }
 .log-line.error { color: #f43f5e; }
 

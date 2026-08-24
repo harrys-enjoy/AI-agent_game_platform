@@ -298,10 +298,151 @@ def test_endpoint_agent_scans_nested_directories():
     assert "src/api/v1/users.py" in output
 
 
-def test_endpoint_agent_returns_message_when_no_routes_found():
+def test_endpoint_agent_returns_message_when_no_routes_found(monkeypatch):
     repo = FakeRepo(branches=[], pulls=[], files={"README.md": "hello"})
     gh = FakeGithub(repo=repo)
+
+    # LLM 폴백도 후보를 하나도 못 고르는 경우를 흉내낸다.
+    monkeypatch.setattr("graph.fetch.chat_completion", lambda messages, **kwargs: "[]")
 
     result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
 
     assert result["results"]["endpoint"] == "감지된 엔드포인트가 없습니다."
+
+
+def test_endpoint_agent_sorts_routes_by_file_then_path():
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={
+            "z_app.py": "@app.get('/z')\ndef z():\n    pass\n",
+            "a_app.py": "@app.get('/b')\ndef b():\n    pass\n\n@app.get('/a')\ndef a():\n    pass\n",
+        },
+    )
+    gh = FakeGithub(repo=repo)
+
+    result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    rows = [line for line in result["results"]["endpoint"].splitlines() if line.startswith("|") and "Method" not in line and "---" not in line]
+    assert [row.split("|")[2].strip() for row in rows] == ["/a", "/b", "/z"]
+
+
+def test_endpoint_agent_falls_back_to_llm_for_non_python_repo(monkeypatch):
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={"main.go": "func main() {\n\trouter.HandleFunc(\"/ping\", pingHandler)\n}\n"},
+    )
+    gh = FakeGithub(repo=repo)
+
+    def fake_chat_completion(messages, **kwargs):
+        if messages[0]["role"] == "system":  # 추출 라운드
+            return '```json\n[{"methods": ["GET"], "path": "/ping", "func": "pingHandler", "file": "main.go", "line": 2}]\n```'
+        return '["main.go"]'  # 선택 라운드
+
+    monkeypatch.setattr("graph.fetch.chat_completion", fake_chat_completion)
+
+    result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    output = result["results"]["endpoint"]
+    assert "/ping" in output
+    assert "pingHandler" in output
+    assert "main.go:2" in output
+
+
+def test_endpoint_agent_llm_fallback_sends_path_list_first_then_only_picked_file_content(monkeypatch):
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={
+            "main.go": "router.HandleFunc(\"/ping\", pingHandler)\n",
+            "util.go": "func add(a, b int) int {\n\treturn a + b\n}\n",
+        },
+    )
+    gh = FakeGithub(repo=repo)
+    captured = {}
+
+    def fake_chat_completion(messages, **kwargs):
+        if messages[0]["role"] == "system":
+            captured["extraction_prompt"] = messages[-1]["content"]
+            return '[{"methods": ["GET"], "path": "/ping", "func": "pingHandler", "file": "main.go", "line": 1}]'
+        captured["selection_prompt"] = messages[-1]["content"]
+        return '["main.go"]'
+
+    monkeypatch.setattr("graph.fetch.chat_completion", fake_chat_completion)
+
+    endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    # 파일 선택 단계엔 경로 목록 전체(내용 없이)를 넘긴다.
+    assert "main.go" in captured["selection_prompt"]
+    assert "util.go" in captured["selection_prompt"]
+    # 실제 내용 스캔은 LLM이 고른 파일만.
+    assert "main.go" in captured["extraction_prompt"]
+    assert "util.go" not in captured["extraction_prompt"]
+
+
+def test_endpoint_agent_llm_fallback_retries_with_next_files_when_first_round_finds_nothing(monkeypatch):
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={
+            "a.go": "package a\n",
+            "b.go": "router.HandleFunc(\"/ping\", pingHandler)\n",
+        },
+    )
+    gh = FakeGithub(repo=repo)
+    selection_prompts = []
+
+    def fake_chat_completion(messages, **kwargs):
+        if messages[0]["role"] == "system":
+            if "b.go" in messages[-1]["content"]:
+                return '[{"methods": ["GET"], "path": "/ping", "func": "pingHandler", "file": "b.go", "line": 1}]'
+            return "[]"
+        selection_prompts.append(messages[-1]["content"])
+        return '["a.go"]' if len(selection_prompts) == 1 else '["b.go"]'
+
+    monkeypatch.setattr("graph.fetch.chat_completion", fake_chat_completion)
+
+    result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    assert "/ping" in result["results"]["endpoint"]
+    assert len(selection_prompts) == 2
+    assert "a.go" not in selection_prompts[1]  # 이미 시도한 파일은 다음 라운드에서 빠진다
+
+
+def test_endpoint_agent_llm_fallback_returns_no_endpoints_on_malformed_json(monkeypatch):
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={"main.go": "router.HandleFunc(\"/ping\", pingHandler)\n"},
+    )
+    gh = FakeGithub(repo=repo)
+
+    def fake_chat_completion(messages, **kwargs):
+        if messages[0]["role"] == "system":
+            return "이건 JSON이 아닙니다"
+        return '["main.go"]'
+
+    monkeypatch.setattr("graph.fetch.chat_completion", fake_chat_completion)
+
+    result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    assert result["results"]["endpoint"] == "감지된 엔드포인트가 없습니다."
+
+
+def test_endpoint_agent_skips_llm_when_regex_already_found_routes(monkeypatch):
+    repo = FakeRepo(
+        branches=[],
+        pulls=[],
+        files={"app.py": "@app.get('/health')\ndef health():\n    pass\n"},
+    )
+    gh = FakeGithub(repo=repo)
+
+    def explode(messages, **kwargs):
+        raise AssertionError("정규식이 이미 라우트를 찾았으면 LLM을 호출하면 안 된다")
+
+    monkeypatch.setattr("graph.fetch.chat_completion", explode)
+
+    result = endpoint_agent({"repo": "owner/repo"}, gh_client=gh)
+
+    assert "/health" in result["results"]["endpoint"]

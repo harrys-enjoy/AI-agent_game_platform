@@ -114,19 +114,51 @@ def _tail(text: str, n: int) -> str:
     return "\n".join(lines[-n:])
 
 
-def _slot_name(repo: str) -> str:
-    """레포별로 겹치지 않는 컨테이너/이미지 이름을 만든다.
+def _slot_name(repo: str, branch: str | None = None, default_branch: str | None = None) -> str:
+    """레포별로(그리고 기본 브랜치가 아닌 브랜치를 지정했다면 브랜치별로도) 겹치지 않는
+    컨테이너/이미지 이름을 만든다.
 
     "owner/name" 형태의 "/"는 Docker 이름에 못 쓰므로 치환하고, 이미지 태그는
-    소문자만 허용되므로 소문자로 통일한다.
+    소문자만 허용되므로 소문자로 통일한다. 기본 브랜치 배포는 지금까지처럼 브랜치를
+    슬롯 이름에 안 붙인다 — 그래야 기존에 떠 있는 배포/삭제 기능과 호환된다. 다른
+    브랜치를 명시했을 때만 같은 레포를 나란히 배포할 수 있도록 슬롯을 분리한다.
     """
-    safe = _UNSAFE_SLOT_CHARS.sub("-", repo.lower())
-    return f"{_SLOT_PREFIX}-{safe}"
+    safe_repo = _UNSAFE_SLOT_CHARS.sub("-", repo.lower())
+    if branch and branch != default_branch:
+        safe_branch = _UNSAFE_SLOT_CHARS.sub("-", branch.lower())
+        return f"{_SLOT_PREFIX}-{safe_repo}-{safe_branch}"
+    return f"{_SLOT_PREFIX}-{safe_repo}"
 
 
-def _find_free_port(port_range: range = PORT_RANGE) -> int | None:
-    """port_range 안에서 로컬 소켓 바인드가 되는 첫 포트를 찾는다. 없으면 None."""
+_PUBLISHED_PORT_RE = re.compile(r":(\d+)->")
+
+
+def _host_ports_in_use(docker: str, run) -> set[int]:
+    """호스트에 지금 실제로 게시된(publish) 컨테이너 포트를 docker ps로 직접 조회한다.
+
+    dev-agent 자신은 별도 네트워크 네임스페이스에 있어서, 소켓 bind 검사만으로는 호스트의
+    실제 포트 점유 상태를 볼 수 없다 — main-agent가 호스트 8000을 쓰고 있어도 dev-agent
+    안에서는 8000이 비어있는 것처럼 보여 실제로 충돌이 났다. docker ps는 소켓을 통해 호스트
+    데몬에 직접 묻는 거라 정확하다 — 이미 배포된 다른 kosa-deploy-* 컨테이너의 포트도 같은
+    이유로 여기서 함께 걸러진다. 조회 자체가 실패하면(Docker 응답 없음 등) 빈 집합을 돌려줘서
+    호출자가 소켓 검사만으로 계속 진행하게 한다.
+    """
+    result = run([docker, "ps", "--format", "{{.Ports}}"], capture_output=True, text=True, timeout=QUICK_TIMEOUT_SEC)
+    if result.returncode != 0:
+        return set()
+    return {int(port) for port in _PUBLISHED_PORT_RE.findall(result.stdout)}
+
+
+def _find_free_port(docker: str, run, port_range: range = PORT_RANGE) -> int | None:
+    """port_range 안에서 호스트에 실제로 안 쓰이는 첫 포트를 찾는다. 없으면 None.
+
+    docker ps로 확인한 호스트의 실제 게시 포트를 먼저 제외한 뒤, 남은 후보만 로컬 소켓
+    bind로 다시 확인한다(Docker가 관리하지 않는 다른 호스트 프로세스가 쓰는 포트까지 걸러줌).
+    """
+    used = _host_ports_in_use(docker, run)
     for port in port_range:
+        if port in used:
+            continue
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:
                 sock.bind(("127.0.0.1", port))
@@ -334,13 +366,13 @@ def deploy_trigger_node(
             }
         }
 
-    slot = _slot_name(state["repo"])
     clone_dir = _clone_dir(worker)
 
     try:
         gh = gh_client or get_github_client()
         repo = gh.get_repo(state["repo"])
         ref = _resolve_ref(state, repo)
+        slot = _slot_name(state["repo"], ref, repo.default_branch)
 
         clone_error = _clone_repo(state["repo"], ref, run, clone_dir)
         if clone_error is not None:
@@ -376,7 +408,7 @@ def deploy_trigger_node(
             pass  # 이전 컨테이너 정리 실패는 치명적이지 않다 — 다음 docker run이 이름 충돌로 실패하면
             # 그 시점에 "컨테이너가 시작되지 않았습니다" 메시지로 사용자에게 보고된다
 
-        port = _find_free_port(port_range)
+        port = _find_free_port(docker, run, port_range)
         if port is None:
             lo, hi = port_range.start, port_range.stop - 1
             return {"results": {"deploy": f"사용 가능한 포트를 찾지 못했습니다 ({lo}~{hi})."}}
@@ -392,8 +424,14 @@ def deploy_trigger_node(
             stderr = (run_result.stderr or "").strip()
             return {"results": {"deploy": f"컨테이너가 시작되지 않았습니다.\n\n{stderr}"}}
 
+        # "localhost"는 dev-agent 자신의 네트워크 네임스페이스를 가리킨다 — 방금 배포한
+        # 컨테이너가 호스트에 게시한 포트를 여기서는 볼 수 없다(실제로 whoami를 배포했을 때
+        # 호스트에서는 정상 응답했는데 이 헬스체크가 "응답 없음"으로 오판했다). Docker Desktop이
+        # 컨테이너 안에서 호스트를 가리키도록 제공하는 host.docker.internal로 확인한다. 유저에게
+        # 보여줄 URL은 그대로 localhost로 둔다 — 유저는 실제 호스트에서 접속하는 것이다.
         url = f"http://localhost:{port}/"
-        if not health_check(url):
+        health_check_url = f"http://host.docker.internal:{port}/"
+        if not health_check(health_check_url):
             logs = run(
                 [docker, "logs", slot], capture_output=True, text=True, timeout=QUICK_TIMEOUT_SEC
             )

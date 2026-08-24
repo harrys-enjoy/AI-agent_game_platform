@@ -4,8 +4,8 @@
 전용이라, main_agent를 로컬에서 직접 붙일 때는 이 스크립트로 띄워야 한다.
 
 main_agent는 workspace_id를 안 보내는데(실측), 실제 환경 파일에 DEFAULT_WORKSPACE_ID가
-없으면 모든 요청이 "레포를 결정할 수 없습니다" 400으로 막힌다. env.example이 예시로 든
-값 그대로 setdefault — 실제 환경 파일에 이미 값이 있으면 이건 무시된다.
+없으면 모든 요청이 "레포를 결정할 수 없습니다" 400으로 막힌다. 이 프로젝트 레포로
+setdefault — 실제 환경 파일에 이미 값이 있으면 이건 무시된다.
 """
 import atexit
 import os
@@ -15,7 +15,7 @@ from pathlib import Path
 
 os.environ.setdefault("DEV_AGENT_PUBLIC_URL", "http://127.0.0.1:8003")
 os.environ.setdefault("DEFAULT_WORKSPACE_ID", "game-team-a")
-os.environ.setdefault("WORKSPACE_REPO_MAP", "game-team-a=dockersamples/todo-list-app")
+os.environ.setdefault("WORKSPACE_REPO_MAP", "game-team-a=harrys-enjoy/AI-agent_game_platform")
 
 _KOSA_FRONT_DIR = Path(__file__).resolve().parent / "kosa_front"
 
