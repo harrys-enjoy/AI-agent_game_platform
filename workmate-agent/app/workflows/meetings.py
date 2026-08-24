@@ -288,14 +288,16 @@ def build_analyze_meeting_workflow(
                 }
             )
         repo.set_summary(meeting_id, request.user_id, analysis.summary)
+        indexed_title = meeting.title
         if _DEFAULT_MEETING_TITLE_PATTERN.match(meeting.title):
             repo.set_title(meeting_id, request.user_id, analysis.title)
+            indexed_title = analysis.title
         warnings = []
         indexing_warning = await _index_meeting_chunks(
             meeting_id,
             request.user_id,
             rows,
-            meeting_title=meeting.title,
+            meeting_title=indexed_title,
             # `started_at`은 입력 계약상 선택값이고(`MeetingCreateRequest`) 실제로 프론트
             # 녹음 화면(`Meeting.tsx`)이 값을 보내지 않아 사실상 항상 `None`이다 —
             # `created_at`(항상 채워짐)으로 대신해 검색 결과 인용에 쓸 실제 날짜가

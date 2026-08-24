@@ -258,6 +258,21 @@ class PostgresMeetingChunkRepository:
         assert row is not None
         return self._record(row)
 
+    def delete_meeting(self, meeting_id: str, user_id: str) -> bool:
+        """사용자 범위의 회의 검색 색인과 소속 Chunk를 삭제한다.
+
+        `meeting_chunks`는 `meetings`를 `ON DELETE CASCADE`로 참조하므로 부모
+        행 하나를 삭제하면 해당 회의의 모든 검색 Chunk가 함께 제거된다.
+        """
+
+        self._initialize()
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM meetings WHERE meeting_id=%s AND user_id=%s",
+                (meeting_id, user_id),
+            )
+            return cursor.rowcount > 0
+
     def get(self, meeting_chunk_id: str, user_id: str) -> MeetingChunkRecord | None:
         """요청 사용자 소유 Chunk만 조회한다."""
         self._initialize()

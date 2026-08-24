@@ -1,6 +1,6 @@
 # Workmate AI Agent
 
-Workmate AI의 공식 `a2a-sdk==1.1.2` HTTP+JSON 런타임입니다. 현재 M0.1-01 범위는 Agent Card, 인증 미들웨어, SDK REST Handler, Streaming·Subscribe Route를 부트스트랩하는 단계이며 Gmail·Calendar·PostgreSQL·LLM Workflow는 이후 마일스톤에서 연결합니다.
+Workmate AI의 공식 `a2a-sdk==1.1.2` HTTP+JSON 런타임이자 업무지원 REST 백엔드입니다. 하나의 FastAPI 앱이 A2A Route와 오늘 브리핑, 주간 업무보고, 할 일, 회의, Gmail·Calendar 제안 및 Assistant Route를 함께 제공합니다.
 
 ## 현재 계약
 
@@ -14,6 +14,7 @@ Workmate AI의 공식 `a2a-sdk==1.1.2` HTTP+JSON 런타임입니다. 현재 M0.1
 | SDK | `a2a-sdk==1.1.2` |
 | Protocol Binding | `HTTP+JSON` |
 | A2A 인프라 저장소 | 운영: PostgreSQL (`DATABASE_URL`), 로컬·Contract Test: SQLite 파일 |
+| REST API | `/api/v1/*` (Compose에서 호스트 `http://127.0.0.1:8100`으로 공개) |
 
 Agent Card는 `GET /.well-known/agent-card.json`에서 공개합니다. Card의 `capabilities.streaming`은 `true`이며, SDK가 생성한 Route 중 MVP allowlist만 등록합니다.
 
@@ -52,18 +53,37 @@ Invoke-RestMethod http://localhost:8001/.well-known/agent-card.json
 
 ## Docker 실행
 
-`.env`에 Secret을 저장할 수 있지만 Git에는 커밋하지 않습니다.
+Compose 파일은 `../main_agent/docker-compose.yml`에 있습니다. `workmate-agent/.env`와 Google OAuth 파일에 Secret을 저장할 수 있지만 Git에는 커밋하지 않습니다.
 
 ```env
 WORKMATE_SERVICE_TOKEN=local-development-token
 APP_BASE_URL=http://workmate-agent:8001/a2a
+OPENAI_API_KEY=...
+WORKMATE_OAUTH_REDIRECT_BASE_URL=http://localhost:8100
 ```
 
 ```powershell
+cd ../main_agent
 docker compose up --build -d
 docker compose ps
 docker compose down
 ```
+
+Compose는 컨테이너의 `8001`을 호스트 `8100`으로 공개하고 PostgreSQL을 함께 실행합니다. A2A는 Main Agent가 Docker 내부 주소 `http://workmate-agent:8001/a2a`로 호출하고, 프론트엔드는 REST API를 `http://127.0.0.1:8100`으로 호출합니다.
+
+Google 연동을 사용하려면 `google-oauth-test/client_secret.json`과 최초 로그인으로 발급받은 `token.json`을 준비합니다. Compose가 두 파일을 컨테이너에 마운트하며 `GOOGLE_CLIENT_SECRET_FILE`, `GOOGLE_TOKEN_FILE`을 자동 지정합니다.
+
+## 업무 기능
+
+- 오늘 브리핑과 주간 업무보고 생성
+- 할 일 등록·수정·완료·삭제 및 우선순위 계산
+- 회의 녹음 업로드, 분석, Action Item 검토와 이전 회의 검색
+- Gmail·Calendar 동기화, 업무 제안 승인·무시
+- 자연어 Assistant를 통한 업무·회의·메일·일정 조회
+
+Assistant가 검색 결과를 답변할 때 회의는 가장 관련도 높은 1건의 날짜·시간·제목, 메일은 수신일·제목을 근거로 표시하고 Calendar에서 직접 찾은 정보에는 `근거: 캘린더`를 표시합니다.
+
+회의 삭제는 사용자 화면과 SQLite 회의 목록에서는 soft delete로 처리해 기존 Task의 provenance 조회를 보존합니다. 동시에 PostgreSQL의 해당 회의 검색 색인과 하위 chunk는 제거하여 삭제한 회의가 이후 검색 결과에 나타나지 않게 합니다. 색인 삭제에 실패하면 불일치 방지를 위해 요청을 `503`으로 종료하고 soft delete도 수행하지 않습니다.
 
 ## 테스트
 
@@ -94,6 +114,6 @@ uv run python tools/m51_a2a_compatibility.py
 - `tests/test_runtime_boot.py`: M0.1-01 부트스트랩 검증
 - `tests/test_persistence.py`, `tests/test_migration.py`: M0.1-03 영속 경계·Migration 검증
 
-현재 Executor는 Registry를 통해 런타임 준비 Workflow를 선택하고 A2A 인프라 Snapshot·멱등성·Checkpoint를 기록합니다. 이 준비 Artifact는 업무 결과가 아니며, 실제 Gmail·Calendar·업무 DB·LLM Workflow는 후속 M1~M4에서 연결합니다. `DATABASE_URL`이 없을 때만 로컬·Contract Test용 SQLite 파일을 사용하고, 운영 Compose는 PostgreSQL URL을 주입해야 합니다.
+Executor는 Registry를 통해 업무 Workflow를 선택하고 A2A 인프라 Snapshot·멱등성·Checkpoint를 기록합니다. Gmail·Calendar·업무 DB·LLM Workflow가 연결되어 있으며, 외부 Provider 기능은 해당 자격 증명이 설정되어야 동작합니다. `DATABASE_URL`이 없으면 지원되는 로컬 저장소는 SQLite 파일을 사용하지만, 회의 검색 색인처럼 PostgreSQL 전용인 기능은 사용할 수 없습니다. 운영 Compose는 PostgreSQL URL을 자동 주입합니다.
 
-기존 Legacy `smoke_test.py`는 제거했으며, 공식 SDK 타입과 승인된 Contract Test로 교체했습니다. 실제 업무 Workflow와 Workmate Result 생성은 후속 M0.1-03 이후 범위입니다.
+기존 Legacy `smoke_test.py`는 제거했으며, 공식 SDK 타입과 승인된 Contract Test로 교체했습니다. 업무 Workflow와 Workmate Result는 A2A 및 REST 실행 경로에서 실제 구현을 사용합니다.

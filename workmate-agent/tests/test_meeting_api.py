@@ -80,13 +80,29 @@ class MeetingApiTests(unittest.TestCase):
         (`GET /api/v1/meetings`)에서만 사라진다."""
 
         self.client.post("/api/v1/meetings", json={"meeting_id": "m-delete", "title": "삭제할 회의"})
-        response = self.client.delete("/api/v1/meetings/m-delete")
+        index_repository = unittest.mock.Mock()
+        with patch("app.meeting_api.meeting_index_repository", return_value=index_repository):
+            response = self.client.delete("/api/v1/meetings/m-delete")
         self.assertEqual(response.status_code, 204)
+        index_repository.delete_meeting.assert_called_once_with("m-delete", "user-a")
         self.assertEqual(self.client.get("/api/v1/meetings/m-delete").status_code, 200)
         self.assertNotIn("m-delete", [item["meeting_id"] for item in self.client.get("/api/v1/meetings").json()])
 
+    def test_delete_keeps_meeting_active_when_search_index_deletion_fails(self):
+        self.client.post("/api/v1/meetings", json={"meeting_id": "m-index-fail", "title": "색인 삭제 실패"})
+        index_repository = unittest.mock.Mock()
+        index_repository.delete_meeting.side_effect = RuntimeError("postgres unavailable")
+
+        with patch("app.meeting_api.meeting_index_repository", return_value=index_repository):
+            response = self.client.delete("/api/v1/meetings/m-index-fail")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIsNotNone(meeting_repository().get("m-index-fail", "user-a"))
+
     def test_delete_unknown_meeting_returns_404(self):
-        self.assertEqual(self.client.delete("/api/v1/meetings/does-not-exist").status_code, 404)
+        with patch("app.meeting_api.meeting_index_repository") as index_repository:
+            self.assertEqual(self.client.delete("/api/v1/meetings/does-not-exist").status_code, 404)
+        index_repository.assert_not_called()
 
     def test_delete_is_scoped_to_the_owning_user(self):
         self.client.post("/api/v1/meetings", json={"meeting_id": "m-owned-by-a", "title": "user-a 회의"})

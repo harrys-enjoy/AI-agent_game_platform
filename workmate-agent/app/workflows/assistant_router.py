@@ -250,6 +250,7 @@ class RoutedAction:
     reply: str | None
     skill_id: str | None
     arguments: dict[str, Any] | None
+    evidence_source: str | None = None
 
 
 def _chat_completion(
@@ -675,6 +676,9 @@ def route(
 ) -> RoutedAction:
     """사용자 문장을 보고 어떤 Skill을 어떤 인자로 부를지(또는 직접 답할지) 정한다."""
 
+    context_match = _resolve_context_reference(
+        text, context, history=history, base_url=base_url, api_key=api_key, model=model
+    )
     system = (
         "당신은 Workmate 업무 비서다. 아래 Skill 중 하나가 필요하면 "
         'action="call_skill"과 skill_id·arguments를 채우고, 잡담이거나 정보가 '
@@ -702,7 +706,7 @@ def route(
         f"[오늘 날짜] {_today(timezone_name)} ({timezone_name}) — '지난 주'·'이번 달' 같은 "
         "상대 시점은 이 날짜를 기준으로 직접 계산해서 채워라.\n\n"
         f"[사용 가능한 Skill]\n{_SKILL_CATALOG}\n[Context]\n{_format_context(context)}"
-        f"{_format_match_hint(_resolve_context_reference(text, context, history=history, base_url=base_url, api_key=api_key, model=model))}"
+        f"{_format_match_hint(context_match)}"
     )
     result = _chat_completion(
         [{"role": "system", "content": system}, *_history_messages(history), {"role": "user", "content": text}],
@@ -728,6 +732,14 @@ def route(
         reply=result.get("reply") if isinstance(result.get("reply"), str) else None,
         skill_id=skill_id if action == "call_skill" else None,
         arguments=arguments if action == "call_skill" else None,
+        evidence_source=(
+            "calendar"
+            if action == "reply"
+            and context_match is not None
+            and context_match.get("kind") == "proposal"
+            and context_match.get("item", {}).get("source_type") == "calendar"
+            else None
+        ),
     )
 
 
@@ -858,6 +870,8 @@ async def assistant_ask_workflow(request_: WorkflowRequest) -> WorkflowResult:
             routed = route(text, context=context, history=history, timezone_name=timezone_name)
         if routed.action == "reply" or routed.skill_id is None:
             reply = routed.reply or "죄송해요, 다시 한 번 말씀해 주시겠어요?"
+            if routed.evidence_source == "calendar":
+                reply = f"{reply}\n\n근거: 캘린더"
             return WorkflowResult(
                 artifact_name="assistant_ask",
                 artifact_description="Natural-language reply with no skill call.",
@@ -942,6 +956,10 @@ async def assistant_ask_workflow(request_: WorkflowRequest) -> WorkflowResult:
     sub_result = await workflow_registry().execute(sub_request)
     result_data = sub_result.data.get("data") if sub_result.data else sub_result.text
     reply = phrase_answer(text, skill_id, result_data, markdown=sub_result.markdown)
+    if skill_id == "search_meetings":
+        reply = _append_meeting_sources(reply, result_data, request_.user_id)
+    if skill_id == "read_email":
+        reply = _append_email_source(reply, result_data)
 
     # 회의 분석(또는 저장된 분석 재조회) 뒤 아직 검토 안 한 Action Item이 있으면
     # 할 일로 추가할지 먼저 물어본다(2026-08-17, 사용자 요청 — Human-in-the-loop).
@@ -963,6 +981,52 @@ async def assistant_ask_workflow(request_: WorkflowRequest) -> WorkflowResult:
         warnings=sub_result.warnings,
         mock=False,
     )
+
+
+def _append_meeting_sources(reply: str, result_data: Any, user_id: str) -> str:
+    """회의 검색 답변 아래에 최상위 근거 회의 한 건만 표시한다."""
+
+    if not isinstance(result_data, dict) or not isinstance(result_data.get("sources"), list):
+        return reply
+    for source in result_data["sources"]:
+        if not isinstance(source, dict):
+            continue
+        meeting_date = str(source.get("meeting_date") or "").strip()
+        meeting_title = str(source.get("meeting_title") or "").strip()
+        if meeting_date and meeting_title:
+            meeting_time = _meeting_source_time(str(source.get("meeting_id") or ""), user_id)
+            date_time = f"{meeting_date} {meeting_time}" if meeting_time else meeting_date
+            return f"{reply}\n\n근거 회의\n- {date_time} · {meeting_title}"
+    return reply
+
+
+def _meeting_source_time(meeting_id: str, user_id: str) -> str | None:
+    """회의 메타데이터에서 Asia/Seoul 기준 시각을 `HH:MM`으로 반환한다."""
+
+    if not meeting_id:
+        return None
+    from app.meeting_api import meeting_repository
+    from zoneinfo import ZoneInfo
+
+    meeting = meeting_repository().get(meeting_id, user_id)
+    occurred_at = (meeting.started_at or meeting.created_at) if meeting is not None else None
+    if occurred_at is None:
+        return None
+    if occurred_at.tzinfo is None or occurred_at.utcoffset() is None:
+        return occurred_at.strftime("%H:%M")
+    return occurred_at.astimezone(ZoneInfo("Asia/Seoul")).strftime("%H:%M")
+
+
+def _append_email_source(reply: str, result_data: Any) -> str:
+    """메일 본문 답변 아래에 수신일과 제목을 표시한다."""
+
+    if not isinstance(result_data, dict) or result_data.get("available") is not True:
+        return reply
+    received_at = str(result_data.get("received_at") or "").strip()
+    subject = str(result_data.get("subject") or "").strip()
+    if not received_at or not subject:
+        return reply
+    return f"{reply}\n\n근거 메일\n- {received_at[:10]} · {subject}"
 
 
 def _offer_to_add_action_items_as_tasks(skill_id: str, result_data: Any) -> dict[str, Any] | None:

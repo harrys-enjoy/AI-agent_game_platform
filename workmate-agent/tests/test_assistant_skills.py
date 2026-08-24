@@ -224,7 +224,7 @@ class AssistantSkillsTests(unittest.TestCase):
         token_path = os.path.join(self.temp_dir.name, "token.json")
         with open(token_path, "w", encoding="utf-8") as handle:
             handle.write("{}")
-        message = GmailMessage("msg-1", "thread-1", "짧은 미리보기", (), "시즌 패스 보상 지급 로직 변경")
+        message = GmailMessage("msg-1", "thread-1", "짧은 미리보기", (), "시즌 패스 보상 지급 로직 변경", "2026-08-22T09:30:00+00:00")
         with unittest.mock.patch.dict(os.environ, {"GOOGLE_TOKEN_FILE": token_path}), unittest.mock.patch(
             "app.providers.google_auth.build_authorized_session", return_value=object()
         ), unittest.mock.patch(
@@ -236,6 +236,7 @@ class AssistantSkillsTests(unittest.TestCase):
         self.assertEqual(result.data["type"], "email_content")
         self.assertTrue(result.data["data"]["available"])
         self.assertEqual(result.data["data"]["subject"], "시즌 패스 보상 지급 로직 변경")
+        self.assertEqual(result.data["data"]["received_at"], "2026-08-22T09:30:00+00:00")
         self.assertIn("v1.4.0 변경 내용을 클라이언트 연동에 반영해야 합니다", result.data["data"]["body"])
 
     def test_read_email_strips_the_action_item_index_suffix_from_a_proposal_source_id(self) -> None:
